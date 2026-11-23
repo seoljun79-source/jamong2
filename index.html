@@ -1,0 +1,4041 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>모두의자리 (Modu's Seat) — 학급 자리배치 & 비밀 설문 통합 플랫폼</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Pretendard / Noto Sans KR / Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * {
+      font-family: 'Noto Sans KR', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 7px;
+      height: 7px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(148, 163, 184, 0.12);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.35);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(100, 116, 139, 0.55);
+    }
+
+    /* Subtle Animations */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.25s ease-out forwards;
+    }
+
+    @keyframes pulseBorder {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45); }
+      50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+    }
+    .avoid-warning-pulse {
+      animation: pulseBorder 1.8s infinite;
+    }
+
+    @keyframes confettiFall {
+      0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(420px) rotate(540deg); opacity: 0; }
+    }
+    .confetti-piece {
+      position: absolute;
+      width: 10px;
+      height: 14px;
+      border-radius: 3px;
+      animation: confettiFall 2.8s ease-in forwards;
+      pointer-events: none;
+    }
+
+    /* Print Styles for A4 Seating Chart */
+    @media print {
+      body {
+        background: #ffffff !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .print-only {
+        display: block !important;
+      }
+      .print-sheet {
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen antialiased selection:bg-indigo-100 selection:text-indigo-900">
+  <!-- Single Root Container -->
+  <div id="app-root" class="min-h-screen"></div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      /* =========================================================================
+       * 1. CONSTANTS & DEFAULT DEMO CLASS DATA (MODU2026 / PIN 1234 / 25명)
+       * ========================================================================= */
+      const STORAGE_KEY_WORKSPACES = 'modus_seat_workspaces_v3';
+      const STORAGE_KEY_ACTIVE_CLASS = 'modus_seat_active_class_v3';
+      const STORAGE_KEY_FIREBASE_CFG = 'modus_seat_firebase_cfg_v3';
+
+      const DEMO_CLASS_CODE = 'MODU2026';
+      const DEMO_CLASS_PIN = '1234';
+
+      const INITIAL_DEMO_STUDENTS = [
+        { id: 's01', num: 1, name: '강도윤', gender: 'M', grade: '상', role: 'mentor', note: '수학 멘토 가능' },
+        { id: 's02', num: 2, name: '강서연', gender: 'F', grade: '중', role: 'normal', note: '차분하고 성실함' },
+        { id: 's03', num: 3, name: '고민준', gender: 'M', grade: '하', role: 'mentee', note: '학습 도움 필요' },
+        { id: 's04', num: 4, name: '권지우', gender: 'F', grade: '상', role: 'mentor', note: '영어/국어 멘토' },
+        { id: 's05', num: 5, name: '김서준', gender: 'M', grade: '중', role: 'normal', note: '분위기 메이커' },
+        { id: 's06', num: 6, name: '김하윤', gender: 'F', grade: '상', role: 'mentor', note: '학급 반장, 리더십' },
+        { id: 's07', num: 7, name: '남궁현', gender: 'M', grade: '하', role: 'mentee', note: '앞자리 집중 권장' },
+        { id: 's08', num: 8, name: '문채원', gender: 'F', grade: '중', role: 'normal', note: '미술 부장' },
+        { id: 's09', num: 9, name: '박시우', gender: 'M', grade: '상', role: 'mentor', note: '과학 탐구 우수' },
+        { id: 's10', num: 10, name: '박지민', gender: 'F', grade: '하', role: 'mentee', note: '모둠 활동 격려 필요' },
+        { id: 's11', num: 11, name: '배준서', gender: 'M', grade: '중', role: 'normal', note: '체육 부장' },
+        { id: 's12', num: 12, name: '서예린', gender: 'F', grade: '상', role: 'mentor', note: '또래 상담 도우미' },
+        { id: 's13', num: 13, name: '송유준', gender: 'M', grade: '중', role: 'normal', note: '성실한 태도' },
+        { id: 's14', num: 14, name: '신다은', gender: 'F', grade: '하', role: 'mentee', note: '칠판 글씨 시력 배려' },
+        { id: 's15', num: 15, name: '안태양', gender: 'M', grade: '상', role: 'mentor', note: '코딩/정보 멘토' },
+        { id: 's16', num: 16, name: '양수빈', gender: 'F', grade: '중', role: 'normal', note: '친화력이 좋음' },
+        { id: 's17', num: 17, name: '오지훈', gender: 'M', grade: '하', role: 'mentee', note: '과제 체크 도움 필요' },
+        { id: 's18', num: 18, name: '유하은', gender: 'F', grade: '상', role: 'mentor', note: '학습 플래너 멘토' },
+        { id: 's19', num: 19, name: '윤건우', gender: 'M', grade: '중', role: 'normal', note: '유머 감각 풍부' },
+        { id: 's20', num: 20, name: '이소율', gender: 'F', grade: '중', role: 'normal', note: '독서 부장' },
+        { id: 's21', num: 21, name: '임재현', gender: 'M', grade: '하', role: 'mentee', note: '차분한 짝꿍 권장' },
+        { id: 's22', num: 22, name: '장서아', gender: 'F', grade: '상', role: 'mentor', note: '부반장, 배려심 깊음' },
+        { id: 's23', num: 23, name: '정우진', gender: 'M', grade: '중', role: 'normal', note: '음악 부장' },
+        { id: 's24', num: 24, name: '조은서', gender: 'F', grade: '하', role: 'mentee', note: '기초 학습 멘토링 희망' },
+        { id: 's25', num: 25, name: '한지호', gender: 'M', grade: '중', role: 'normal', note: '환경 부장' }
+      ];
+
+      const INITIAL_DEMO_SURVEYS = {
+        s01: { studentId: 's01', prefer: ['s09', 's15', 's05'], avoid: ['s07', '', ''], bestStudentId: 's06', bestBadge: '리더십·배려왕', message: '하윤이가 항상 학급 일을 솔선수범해서 고마워요!', updatedAt: '2026-11-20 14:10' },
+        s02: { studentId: 's02', prefer: ['s04', 's08', 's20'], avoid: ['s19', '', ''], bestStudentId: 's22', bestBadge: '다정·배려왕', message: '서아가 모둠 활동할 때 항상 친절하게 도와줘서 힘이 납니다.', updatedAt: '2026-11-20 14:12' },
+        s03: { studentId: 's03', prefer: ['s01', 's05', 's13'], avoid: ['s11', '', ''], bestStudentId: 's01', bestBadge: '학습 멘토왕', message: '도윤이가 수학 문제를 쉽게 설명해 줘서 정말 고마웠어요.', updatedAt: '2026-11-20 14:15' },
+        s04: { studentId: 's04', prefer: ['s02', 's06', 's12'], avoid: ['s17', '', ''], bestStudentId: 's06', bestBadge: '모범·성실왕', message: '이번 달에도 우리 반 분위기가 따뜻해서 좋아요!', updatedAt: '2026-11-20 14:18' },
+        s05: { studentId: 's05', prefer: ['s03', 's19', 's01'], avoid: ['s23', '', ''], bestStudentId: 's19', bestBadge: '분위기 메이커', message: '건우 덕분에 체육 시간과 쉬는 시간이 항상 즐거워요.', updatedAt: '2026-11-20 14:20' },
+        s06: { studentId: 's06', prefer: ['s22', 's04', 's18'], avoid: ['s07', '', ''], bestStudentId: 's22', bestBadge: '든든한 부반장', message: '서아가 늘 옆에서 같이 챙겨줘서 정말 든든해!', updatedAt: '2026-11-20 14:21' },
+        s07: { studentId: 's07', prefer: ['s09', 's13', ''], avoid: ['s01', 's06', ''], bestStudentId: 's09', bestBadge: '친절한 도우미', message: '시우가 과학 실험할 때 잘 알려줘서 고마웠습니다.', updatedAt: '2026-11-20 14:25' },
+        s08: { studentId: 's08', prefer: ['s02', 's16', 's20'], avoid: ['', '', ''], bestStudentId: 's16', bestBadge: '미소 천사', message: '수빈이가 항상 밝게 인사해 줘서 기분이 좋아져요.', updatedAt: '2026-11-20 14:28' },
+        s09: { studentId: 's09', prefer: ['s01', 's15', 's07'], avoid: ['s19', '', ''], bestStudentId: 's15', bestBadge: '아이디어 뱅크', message: '태양이랑 같이 탐구 보고서 쓰면서 많이 배웠어요.', updatedAt: '2026-11-20 14:30' },
+        s10: { studentId: 's10', prefer: ['s12', 's18', 's16'], avoid: ['s14', '', ''], bestStudentId: 's12', bestBadge: '따뜻한 상담가', message: '예린이가 고민을 잘 들어주고 응원해 줘서 큰 힘이 됐어요.', updatedAt: '2026-11-20 14:33' },
+        s11: { studentId: 's11', prefer: ['s13', 's25', 's23'], avoid: ['s03', '', ''], bestStudentId: 's25', bestBadge: '묵묵한 성실왕', message: '지호가 교실 정리를 매일 깨끗이 해줘서 고맙습니다.', updatedAt: '2026-11-20 14:36' },
+        s12: { studentId: 's12', prefer: ['s10', 's18', 's04'], avoid: ['', '', ''], bestStudentId: 's18', bestBadge: '배려·나눔왕', message: '하은이가 필기 노트를 기꺼이 빌려줘서 감동받았어요.', updatedAt: '2026-11-20 14:40' },
+        s13: { studentId: 's13', prefer: ['s11', 's21', 's03'], avoid: ['', '', ''], bestStudentId: 's06', bestBadge: '최고의 반장', message: '하윤이가 공지사항을 꼼꼼히 알려줘서 놓치는 일이 없어요.', updatedAt: '2026-11-20 14:42' },
+        s14: { studentId: 's14', prefer: ['s18', 's22', 's20'], avoid: ['s10', '', ''], bestStudentId: 's18', bestBadge: '다정한 짝꿍', message: '하은이가 칠판 내용도 같이 확인해 주고 잘 챙겨줘요.', updatedAt: '2026-11-20 14:45' },
+        s15: { studentId: 's15', prefer: ['s09', 's01', 's17'], avoid: ['', '', ''], bestStudentId: 's01', bestBadge: '든든한 친구', message: '도윤이와 함께 공부하면서 서로 좋은 자극을 받았습니다.', updatedAt: '2026-11-20 14:48' },
+        s16: { studentId: 's16', prefer: ['s08', 's20', 's10'], avoid: ['s21', '', ''], bestStudentId: 's08', bestBadge: '예술·감성왕', message: '채원이가 학급 게시판 꾸밀 때 정말 열심히 해줬어요!', updatedAt: '2026-11-20 14:50' },
+        s17: { studentId: 's17', prefer: ['s15', 's23', 's25'], avoid: ['s04', '', ''], bestStudentId: 's15', bestBadge: '친절 멘토', message: '태양이가 정보 시간에 코딩 오류를 같이 고쳐줘서 고마워요.', updatedAt: '2026-11-20 14:52' },
+        s18: { studentId: 's18', prefer: ['s12', 's14', 's06'], avoid: ['', '', ''], bestStudentId: 's12', bestBadge: '다정·배려왕', message: '예린이는 언제나 친구들의 이야기를 진심으로 들어줘요.', updatedAt: '2026-11-20 14:55' },
+        s19: { studentId: 's19', prefer: ['s05', 's23', 's25'], avoid: ['s02', 's09', ''], bestStudentId: 's05', bestBadge: '긍정 에너지왕', message: '서준이가 항상 웃으면서 응원해 줘서 즐거워요.', updatedAt: '2026-11-20 14:57' },
+        s20: { studentId: 's20', prefer: ['s16', 's08', 's02'], avoid: ['', '', ''], bestStudentId: 's22', bestBadge: '책임감 최고', message: '서아가 맡은 일을 끝까지 책임지는 모습이 멋져요.', updatedAt: '2026-11-20 15:00' },
+        s21: { studentId: 's21', prefer: ['s13', 's25', 's09'], avoid: ['s16', '', ''], bestStudentId: 's13', bestBadge: '차분한 모범생', message: '유준이가 조용히 옆에서 도와줘서 집중이 잘 됐어요.', updatedAt: '2026-11-20 15:02' },
+        s22: { studentId: 's22', prefer: ['s06', 's24', 's14'], avoid: ['', '', ''], bestStudentId: 's06', bestBadge: '최고의 파트너', message: '하윤이와 함께 학급을 이끌어갈 수 있어서 행복해요!', updatedAt: '2026-11-20 15:05' },
+        s23: { studentId: 's23', prefer: ['s19', 's17', 's11'], avoid: ['s05', '', ''], bestStudentId: 's19', bestBadge: '즐거운 친구', message: '건우랑 점심시간마다 즐겁게 이야기해서 좋아요.', updatedAt: '2026-11-20 15:08' },
+        s24: { studentId: 's24', prefer: ['s22', 's04', 's12'], avoid: ['', '', ''], bestStudentId: 's22', bestBadge: '천사 멘토', message: '서아가 기초 문제부터 차근차근 알려줘서 자신감이 생겼어요!', updatedAt: '2026-11-20 15:10' },
+        s25: { studentId: 's25', prefer: ['s11', 's21', 's19'], avoid: ['', '', ''], bestStudentId: 's11', bestBadge: '활기찬 리더', message: '준서가 체육대회 준비할 때 모두를 잘 이끌어줬어요.', updatedAt: '2026-11-20 15:12' }
+      };
+
+      function createDefaultWorkspace(code = DEMO_CLASS_CODE, name = '2학년 3반 (체험 학급)', pin = DEMO_CLASS_PIN, withDemoData = true) {
+        const students = withDemoData ? JSON.parse(JSON.stringify(INITIAL_DEMO_STUDENTS)) : [];
+        const surveys = withDemoData ? JSON.parse(JSON.stringify(INITIAL_DEMO_SURVEYS)) : {};
+        const cols = 5;
+        const rows = 6;
+        const grid = Array.from({ length: rows }, () => Array(cols).fill(null));
+        const pinned = {};
+
+        if (withDemoData) {
+          students.forEach((st, idx) => {
+            const r = Math.floor(idx / cols);
+            const c = idx % cols;
+            if (r < rows && c < cols) {
+              grid[r][c] = st.id;
+            }
+          });
+          // Pin 2 students in front row as example
+          pinned['s07'] = true;
+          pinned['s14'] = true;
+        }
+
+        return {
+          code: code.toUpperCase().trim(),
+          name: name.trim(),
+          pin: String(pin).trim(),
+          createdAt: new Date().toISOString().slice(0, 10),
+          students,
+          surveys,
+          seating: {
+            mode: 'single', // 'single' (1인 책상 분단형) | 'pair' (2인 1조 짝꿍형)
+            cols,
+            rows,
+            grid,
+            pinned,
+            lastAlgorithm: '초기 명단 순 배치'
+          },
+          archives: withDemoData
+            ? [
+                {
+                  id: 'arc_demo_1',
+                  title: '2026년 9월 2학기 첫 자리배치',
+                  date: '2026-09-02',
+                  memo: '멘토-멘티 짝꿍 매칭 적용 배치 기록',
+                  mode: 'pair',
+                  cols: 6,
+                  rows: 6,
+                  grid: (() => {
+                    const g = Array.from({ length: 6 }, () => Array(6).fill(null));
+                    students.forEach((st, i) => {
+                      const r = Math.floor(i / 6);
+                      const c = i % 6;
+                      if (r < 6 && c < 6) g[r][c] = st.id;
+                    });
+                    return g;
+                  })()
+                }
+              ]
+            : []
+        };
+      }
+
+      /* =========================================================================
+       * 2. URL MODE DETECTION & APPLICATION STATE
+       * ========================================================================= */
+      const urlParams = new URLSearchParams(window.location.search);
+      const initialStudentUrlMode = urlParams.get('mode') === 'student';
+      const initialClassParam = (urlParams.get('class') || '').toUpperCase().trim();
+
+      function loadWorkspaces() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY_WORKSPACES);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+              return parsed;
+            }
+          }
+        } catch (e) {
+          console.warn('Workspace load fallback:', e);
+        }
+        const initial = {
+          [DEMO_CLASS_CODE]: createDefaultWorkspace(DEMO_CLASS_CODE, '2학년 3반 (체험 학급)', DEMO_CLASS_PIN, true)
+        };
+        saveWorkspaces(initial);
+        return initial;
+      }
+
+      function saveWorkspaces(workspaces) {
+        try {
+          localStorage.setItem(STORAGE_KEY_WORKSPACES, JSON.stringify(workspaces));
+        } catch (e) {
+          console.warn('Workspace save warning:', e);
+        }
+      }
+
+      function loadFirebaseConfig() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY_FIREBASE_CFG);
+          return raw ? JSON.parse(raw) : { enabled: false, apiKey: '', authDomain: '', projectId: '', appId: '' };
+        } catch (e) {
+          return { enabled: false, apiKey: '', authDomain: '', projectId: '', appId: '' };
+        }
+      }
+
+      const workspaces = loadWorkspaces();
+      const savedActiveCode = (localStorage.getItem(STORAGE_KEY_ACTIVE_CLASS) || '').toUpperCase();
+      const resolvedInitialCode =
+        (initialClassParam && workspaces[initialClassParam] && initialClassParam) ||
+        (savedActiveCode && workspaces[savedActiveCode] && savedActiveCode) ||
+        Object.keys(workspaces)[0] ||
+        DEMO_CLASS_CODE;
+
+      const state = {
+        workspaces,
+        activeClassCode: resolvedInitialCode,
+        // CRITICAL ROUTING & ACCESS CONTROL STATES:
+        // 1) isStudentUrlMode: true ONLY when accessed via ?mode=student URL
+        isStudentUrlMode: initialStudentUrlMode,
+        // 2) previewStudentMode: true ONLY when authenticated teacher clicks preview button
+        previewStudentMode: false,
+        // 3) isTeacherAuthenticated: true ONLY after entering valid class PIN
+        isTeacherAuthenticated: false,
+
+        // Secret escape hatch counter for ?mode=student accidental teacher visits
+        secretTapCount: 0,
+        secretTapTimer: null,
+        showSecretPinModal: false,
+        secretPinInput: '',
+        secretPinError: '',
+
+        // Workspace Login / Creation Gate UI state
+        gateTab: 'login', // 'login' | 'create'
+        loginClassCode: resolvedInitialCode,
+        loginPin: '',
+        loginError: '',
+        newClassCode: '',
+        newClassName: '',
+        newClassPin: '',
+        newClassRosterText: '1 김민준\n2 이서연\n3 박도윤\n4 최지우\n5 정하준\n6 강서아',
+        createError: '',
+
+        // Teacher Dashboard Navigation
+        activeTab: 'seating', // 'seating' | 'graph' | 'survey' | 'awards' | 'archive'
+
+        // Seating Studio UI state
+        selectedSeat: null, // { r, c } or { unplacedId }
+        dragSource: null,   // { type: 'grid', r, c } | { type: 'unplaced', studentId }
+        tvHideSensitive: false,
+        seatingAnalysis: null,
+
+        // Student 3-Step Survey Form State
+        surveyStep: 1, // 1 | 2 | 3 | 4 (submitted)
+        surveySearch: '',
+        surveyForm: {
+          studentId: '',
+          prefer: ['', '', ''],
+          avoid: ['', '', ''],
+          bestStudentId: '',
+          bestBadge: '다정·배려왕',
+          message: ''
+        },
+
+        // Relationship Graph State
+        graphZoom: 100,
+        graphFullscreen: false,
+        graphFilter: 'all', // 'all' | 'mutual' | 'avoid'
+        graphPositions: {}, // { [classCode]: { [studentId]: { x, y } } }
+        selectedGraphStudentId: null,
+
+        // Awards Ceremony TV Sequential Reveal State
+        awardRevealStep: 0, // 0: Ready, 1: 3rd place, 2: 2nd place, 3: 1st place & all messages
+
+        // Archive Modal / Input State
+        archiveTitleInput: '',
+        archiveMemoInput: '',
+
+        // Roster Add/Edit State
+        rosterNewNum: '',
+        rosterNewName: '',
+        rosterNewGrade: '중',
+        rosterNewRole: 'normal',
+        rosterNewNote: '',
+
+        // Modals & Cloud Sync
+        showFirebaseModal: false,
+        firebaseConfig: loadFirebaseConfig(),
+        firebaseSyncStatus: 'local', // 'local' | 'connected' | 'error'
+        toast: null // { message, type: 'success' | 'error' | 'info' }
+      };
+
+      /* =========================================================================
+       * 3. HELPER UTILITIES (SAFE HTML ESCAPING, TOASTS, CLASS ACCESSORS)
+       * ========================================================================= */
+      function esc(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      let toastTimeout = null;
+      function showToast(message, type = 'info') {
+        state.toast = { message, type };
+        render();
+        if (toastTimeout) clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => {
+          state.toast = null;
+          render();
+        }, 3200);
+      }
+
+      function getCurrentWorkspace() {
+        if (!state.workspaces[state.activeClassCode]) {
+          const firstKey = Object.keys(state.workspaces)[0];
+          if (firstKey) {
+            state.activeClassCode = firstKey;
+          } else {
+            state.workspaces[DEMO_CLASS_CODE] = createDefaultWorkspace();
+            state.activeClassCode = DEMO_CLASS_CODE;
+            saveWorkspaces(state.workspaces);
+          }
+        }
+        return state.workspaces[state.activeClassCode];
+      }
+
+      function persistCurrentWorkspace() {
+        saveWorkspaces(state.workspaces);
+        try {
+          localStorage.setItem(STORAGE_KEY_ACTIVE_CLASS, state.activeClassCode);
+        } catch (e) {
+          // ignore storage quota issues
+        }
+        syncToCloudIfEnabled();
+      }
+
+      function syncToCloudIfEnabled() {
+        if (!state.firebaseConfig || !state.firebaseConfig.enabled || !state.firebaseConfig.projectId) {
+          state.firebaseSyncStatus = 'local';
+          return;
+        }
+        // Lightweight Firestore REST sync if user configured valid Firebase projectId & apiKey
+        const ws = getCurrentWorkspace();
+        try {
+          const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(state.firebaseConfig.projectId)}/databases/(default)/documents/modus_classes/${encodeURIComponent(ws.code)}?key=${encodeURIComponent(state.firebaseConfig.apiKey || '')}`;
+          fetch(url, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fields: {
+                payload: { stringValue: JSON.stringify(ws) },
+                updatedAt: { stringValue: new Date().toISOString() }
+              }
+            })
+          })
+            .then((res) => {
+              state.firebaseSyncStatus = res.ok ? 'connected' : 'error';
+            })
+            .catch(() => {
+              state.firebaseSyncStatus = 'error';
+            });
+        } catch (e) {
+          state.firebaseSyncStatus = 'error';
+        }
+      }
+
+      function getStudentById(ws, id) {
+        if (!id) return null;
+        return ws.students.find((s) => s.id === id) || null;
+      }
+
+      function copyTextSafely(text, successMsg) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy');
+          showToast(successMsg, 'success');
+        } catch (e) {
+          showToast('복사에 실패했습니다. 주소를 직접 선택해 복사해 주세요.', 'error');
+        }
+        document.body.removeChild(ta);
+      }
+
+      function buildStudentShareUrl(classCode) {
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.set('mode', 'student');
+          url.searchParams.set('class', classCode);
+          return url.toString();
+        } catch (e) {
+          const base = window.location.href.split('?')[0];
+          return `${base}?mode=student&class=${encodeURIComponent(classCode)}`;
+        }
+      }
+
+      /* =========================================================================
+       * 4. SEATING ENGINE: GRID MANAGEMENT, ANALYSIS & 5,000-ITER SIMULATED ANNEALING
+       * ========================================================================= */
+      function resizeSeatingGrid(ws, newMode, newCols, newRows) {
+        const mode = newMode || ws.seating.mode;
+        let cols = Math.max(2, Math.min(10, parseInt(newCols, 10) || ws.seating.cols));
+        const rows = Math.max(2, Math.min(8, parseInt(newRows, 10) || ws.seating.rows));
+
+        // In pair mode (2인 1조 짝꿍형), ensure even number of columns (minimum 4, e.g., 6 cols = 3 groups)
+        if (mode === 'pair' && cols % 2 !== 0) {
+          cols = cols < 10 ? cols + 1 : cols - 1;
+        }
+
+        const oldGrid = ws.seating.grid || [];
+        const newGrid = Array.from({ length: rows }, () => Array(cols).fill(null));
+        const overflow = [];
+
+        for (let r = 0; r < oldGrid.length; r++) {
+          for (let c = 0; c < (oldGrid[r] || []).length; c++) {
+            const stId = oldGrid[r][c];
+            if (!stId) continue;
+            if (!getStudentById(ws, stId)) continue;
+            if (r < rows && c < cols) {
+              newGrid[r][c] = stId;
+            } else {
+              overflow.push(stId);
+            }
+          }
+        }
+
+        // Try placing overflow students into any empty seats in the new grid
+        for (let r = 0; r < rows && overflow.length > 0; r++) {
+          for (let c = 0; c < cols && overflow.length > 0; c++) {
+            if (!newGrid[r][c]) {
+              newGrid[r][c] = overflow.shift();
+            }
+          }
+        }
+
+        ws.seating.mode = mode;
+        ws.seating.cols = cols;
+        ws.seating.rows = rows;
+        ws.seating.grid = newGrid;
+      }
+
+      function getUnplacedStudents(ws) {
+        const placedSet = new Set();
+        ws.seating.grid.forEach((row) =>
+          row.forEach((id) => {
+            if (id) placedSet.add(id);
+          })
+        );
+        return ws.students.filter((s) => !placedSet.has(s.id));
+      }
+
+      function getAdjacentPairs(ws) {
+        const { mode, cols, rows, grid } = ws.seating;
+        const pairs = []; // { a, b, isPartner }
+
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const idA = grid[r]?.[c];
+            if (!idA) continue;
+
+            // Right neighbor
+            if (c + 1 < cols && grid[r]?.[c + 1]) {
+              const idB = grid[r][c + 1];
+              const isPartner = mode === 'pair' && c % 2 === 0;
+              pairs.push({ a: idA, b: idB, isPartner });
+            }
+            // Back neighbor
+            if (r + 1 < rows && grid[r + 1]?.[c]) {
+              const idB = grid[r + 1][c];
+              pairs.push({ a: idA, b: idB, isPartner: false });
+            }
+          }
+        }
+        return pairs;
+      }
+
+      function getSeatAvoidWarnings(ws) {
+        const warnings = {}; // { [studentId]: string[] }
+        const pairs = getAdjacentPairs(ws);
+        pairs.forEach(({ a, b }) => {
+          const survA = ws.surveys[a];
+          const survB = ws.surveys[b];
+          const stA = getStudentById(ws, a);
+          const stB = getStudentById(ws, b);
+          if (!stA || !stB) return;
+
+          if (survA && Array.isArray(survA.avoid) && survA.avoid.includes(b)) {
+            if (!warnings[a]) warnings[a] = [];
+            warnings[a].push(`${stB.num}번 ${stB.name} (기피 대상 인접)`);
+            if (!warnings[b]) warnings[b] = [];
+            warnings[b].push(`${stA.num}번 ${stA.name} 측 기피 인접`);
+          } else if (survB && Array.isArray(survB.avoid) && survB.avoid.includes(a)) {
+            if (!warnings[b]) warnings[b] = [];
+            warnings[b].push(`${stA.num}번 ${stA.name} (기피 대상 인접)`);
+            if (!warnings[a]) warnings[a] = [];
+            warnings[a].push(`${stB.num}번 ${stB.name} 측 기피 인접`);
+          }
+        });
+        return warnings;
+      }
+
+      function computeSeatingReport(ws) {
+        const pairs = getAdjacentPairs(ws);
+        let preferredMatches = 0;
+        let firstChoiceMatches = 0;
+        let avoidConflicts = 0;
+        let mentorMenteeMatches = 0;
+
+        const seenPrefEdges = new Set();
+        const seenAvoidEdges = new Set();
+
+        pairs.forEach(({ a, b, isPartner }) => {
+          const stA = getStudentById(ws, a);
+          const stB = getStudentById(ws, b);
+          const survA = ws.surveys[a];
+          const survB = ws.surveys[b];
+
+          if (survA?.prefer?.includes(b)) {
+            const key = `${a}->${b}`;
+            if (!seenPrefEdges.has(key)) {
+              seenPrefEdges.add(key);
+              preferredMatches++;
+              if (survA.prefer[0] === b) firstChoiceMatches++;
+            }
+          }
+          if (survB?.prefer?.includes(a)) {
+            const key = `${b}->${a}`;
+            if (!seenPrefEdges.has(key)) {
+              seenPrefEdges.add(key);
+              preferredMatches++;
+              if (survB.prefer[0] === a) firstChoiceMatches++;
+            }
+          }
+
+          if (survA?.avoid?.includes(b) || survB?.avoid?.includes(a)) {
+            const pairKey = [a, b].sort().join('-');
+            if (!seenAvoidEdges.has(pairKey)) {
+              seenAvoidEdges.add(pairKey);
+              avoidConflicts++;
+            }
+          }
+
+          if (stA && stB) {
+            const isMM =
+              (stA.role === 'mentor' && stB.role === 'mentee') ||
+              (stA.role === 'mentee' && stB.role === 'mentor');
+            if (isMM && (ws.seating.mode === 'single' || isPartner)) {
+              mentorMenteeMatches++;
+            }
+          }
+        });
+
+        // Grade balance across rows/columns
+        const gradeVal = { 상: 3, 중: 2, 하: 1 };
+        const rowAverages = [];
+        ws.seating.grid.forEach((row) => {
+          const vals = row
+            .map((id) => getStudentById(ws, id))
+            .filter(Boolean)
+            .map((s) => gradeVal[s.grade] || 2);
+          if (vals.length > 0) {
+            rowAverages.push(vals.reduce((acc, v) => acc + v, 0) / vals.length);
+          }
+        });
+        let variance = 0;
+        if (rowAverages.length > 1) {
+          const mean = rowAverages.reduce((a, b) => a + b, 0) / rowAverages.length;
+          variance = rowAverages.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) / rowAverages.length;
+        }
+        const balanceScore = Math.max(55, Math.min(100, Math.round(100 - variance * 65)));
+
+        const totalSurveyRespondents = Object.keys(ws.surveys).length || 1;
+        const satisfactionRate = Math.min(100, Math.round((preferredMatches / totalSurveyRespondents) * 100));
+
+        return {
+          preferredMatches,
+          firstChoiceMatches,
+          avoidConflicts,
+          mentorMenteeMatches,
+          balanceScore,
+          satisfactionRate
+        };
+      }
+
+      function runSimulatedAnnealing(ws, strategy) {
+        // strategy: 'mentor' | 'balanced' | 'preferred'
+        const { mode, cols, rows, grid, pinned } = ws.seating;
+        const totalSlots = rows * cols;
+        if (ws.students.length === 0) {
+          showToast('배치할 학생 명단이 비어 있습니다.', 'error');
+          return;
+        }
+
+        // Build flat list of current seats, placing any unplaced students into open seats first
+        const flat = [];
+        const placedIds = new Set();
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const id = grid[r]?.[c] || null;
+            flat.push(id);
+            if (id) placedIds.add(id);
+          }
+        }
+        const unplaced = ws.students.filter((s) => !placedIds.has(s.id)).map((s) => s.id);
+        for (let i = 0; i < flat.length && unplaced.length > 0; i++) {
+          if (!flat[i]) {
+            flat[i] = unplaced.shift();
+          }
+        }
+
+        // Identify movable indices (not pinned)
+        const movableIndices = [];
+        for (let i = 0; i < totalSlots; i++) {
+          const id = flat[i];
+          if (!id || !pinned[id]) {
+            movableIndices.push(i);
+          }
+        }
+
+        if (movableIndices.length < 2) {
+          showToast('고정되지 않은 자리가 2개 이상 있어야 최적화를 실행할 수 있습니다.', 'info');
+          return;
+        }
+
+        const studentMap = {};
+        ws.students.forEach((s) => {
+          studentMap[s.id] = s;
+        });
+        const gradeNum = { 상: 3, 중: 2, 하: 1 };
+
+        function evaluate(arr) {
+          let score = 0;
+
+          for (let r = 0; r < rows; r++) {
+            let rowGradeSum = 0;
+            let rowCount = 0;
+
+            for (let c = 0; c < cols; c++) {
+              const idx = r * cols + c;
+              const idA = arr[idx];
+              if (!idA) continue;
+              const stA = studentMap[idA];
+              const survA = ws.surveys[idA];
+
+              if (stA) {
+                rowGradeSum += gradeNum[stA.grade] || 2;
+                rowCount++;
+              }
+
+              // Check right neighbor
+              if (c + 1 < cols) {
+                const idB = arr[idx + 1];
+                if (idB) {
+                  const stB = studentMap[idB];
+                  const survB = ws.surveys[idB];
+                  const isPartner = mode === 'pair' && c % 2 === 0;
+                  const weightMult = isPartner ? 1.8 : 1.0;
+
+                  // Avoidance heavy penalty across all strategies
+                  if (survA?.avoid?.includes(idB)) {
+                    const rank = survA.avoid.indexOf(idB);
+                    score -= (rank === 0 ? 550 : rank === 1 ? 400 : 300) * weightMult;
+                  }
+                  if (survB?.avoid?.includes(idA)) {
+                    const rank = survB.avoid.indexOf(idA);
+                    score -= (rank === 0 ? 550 : rank === 1 ? 400 : 300) * weightMult;
+                  }
+
+                  // Preference reward
+                  const prefMult = strategy === 'preferred' ? 2.4 : 1.0;
+                  if (survA?.prefer?.includes(idB)) {
+                    const rank = survA.prefer.indexOf(idB);
+                    score += (rank === 0 ? 95 : rank === 1 ? 65 : 40) * weightMult * prefMult;
+                  }
+                  if (survB?.prefer?.includes(idA)) {
+                    const rank = survB.prefer.indexOf(idA);
+                    score += (rank === 0 ? 95 : rank === 1 ? 65 : 40) * weightMult * prefMult;
+                  }
+
+                  // Mentor-Mentee pairing reward
+                  if (stA && stB) {
+                    const isMentorMentee =
+                      (stA.role === 'mentor' && stB.role === 'mentee') ||
+                      (stA.role === 'mentee' && stB.role === 'mentor');
+                    const mentorMult = strategy === 'mentor' ? 3.2 : 0.8;
+                    if (isMentorMentee) {
+                      score += (mode === 'pair' ? (isPartner ? 130 : 15) : 95) * mentorMult;
+                    }
+                    // Penalize mentee + mentee sitting as direct partners
+                    if (stA.role === 'mentee' && stB.role === 'mentee' && (mode === 'single' || isPartner)) {
+                      score -= 45 * mentorMult;
+                    }
+
+                    // Balanced grade diversity between partners/neighbors
+                    if (strategy === 'balanced' && (mode === 'single' || isPartner)) {
+                      const diff = Math.abs((gradeNum[stA.grade] || 2) - (gradeNum[stB.grade] || 2));
+                      if (diff === 1) score += 70;
+                      else if (diff === 2) score += 45;
+                      else score -= 35;
+                    }
+                  }
+                }
+              }
+
+              // Check back neighbor (same column, next row)
+              if (r + 1 < rows) {
+                const idD = arr[(r + 1) * cols + c];
+                if (idD) {
+                  const survD = ws.surveys[idD];
+                  if (survA?.avoid?.includes(idD) || survD?.avoid?.includes(idA)) {
+                    score -= 320;
+                  }
+                  const prefMult = strategy === 'preferred' ? 2.0 : 0.85;
+                  if (survA?.prefer?.includes(idD)) score += 45 * prefMult;
+                  if (survD?.prefer?.includes(idA)) score += 45 * prefMult;
+                }
+              }
+            }
+
+            // Row average balance for 'balanced' strategy
+            if (strategy === 'balanced' && rowCount > 0) {
+              const rowAvg = rowGradeSum / rowCount;
+              score -= Math.abs(rowAvg - 2.0) * 140;
+            }
+          }
+
+          return score;
+        }
+
+        let current = flat.slice();
+        let currentScore = evaluate(current);
+        let best = current.slice();
+        let bestScore = currentScore;
+
+        const ITERATIONS = 5000;
+        for (let step = 0; step < ITERATIONS; step++) {
+          const temp = Math.max(0.5, 180 * Math.pow(1 - step / ITERATIONS, 2));
+          const i1 = movableIndices[Math.floor(Math.random() * movableIndices.length)];
+          let i2 = movableIndices[Math.floor(Math.random() * movableIndices.length)];
+          if (i1 === i2) continue;
+
+          // Swap
+          const tmp = current[i1];
+          current[i1] = current[i2];
+          current[i2] = tmp;
+
+          const nextScore = evaluate(current);
+          const delta = nextScore - currentScore;
+
+          if (delta > 0 || Math.exp(delta / temp) > Math.random()) {
+            currentScore = nextScore;
+            if (nextScore > bestScore) {
+              bestScore = nextScore;
+              best = current.slice();
+            }
+          } else {
+            // Revert
+            current[i2] = current[i1];
+            current[i1] = tmp;
+          }
+        }
+
+        // Write best back to 2D grid
+        const nextGrid = Array.from({ length: rows }, () => Array(cols).fill(null));
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            nextGrid[r][c] = best[r * cols + c] || null;
+          }
+        }
+
+        const labelMap = {
+          mentor: '멘토-멘티 짝꿍 매칭 (5,000회 최적화)',
+          balanced: '성적 고른 분포 배치 (5,000회 최적화)',
+          preferred: '선호 친구 우선 배치 (5,000회 최적화)'
+        };
+
+        ws.seating.grid = nextGrid;
+        ws.seating.lastAlgorithm = labelMap[strategy] || 'AI 자동 배치';
+        state.selectedSeat = null;
+        persistCurrentWorkspace();
+        render();
+        showToast(`✨ ${labelMap[strategy]} 완료!`, 'success');
+      }
+
+      /* =========================================================================
+       * 5. RELATIONSHIP GRAPH: 180-ITERATION FORCE LAYOUT, DIAGNOSTICS & PNG EXPORT
+       * ========================================================================= */
+      function computeForceGraphPositions(ws, forceReset = false) {
+        const W = 1440;
+        const H = 960;
+        const PAD = 95;
+
+        if (!state.graphPositions[ws.code]) {
+          state.graphPositions[ws.code] = {};
+        }
+        const posMap = state.graphPositions[ws.code];
+        const students = ws.students;
+        if (students.length === 0) return posMap;
+
+        const needsInit = forceReset || students.some((s) => !posMap[s.id]);
+        if (needsInit) {
+          const cx = W / 2;
+          const cy = H / 2;
+          const rx = W * 0.36;
+          const ry = H * 0.35;
+          students.forEach((st, idx) => {
+            const angle = (2 * Math.PI * idx) / students.length - Math.PI / 2;
+            posMap[st.id] = {
+              x: cx + rx * Math.cos(angle) + ((idx % 3) - 1) * 18,
+              y: cy + ry * Math.sin(angle) + ((idx % 2) - 0.5) * 18
+            };
+          });
+        }
+
+        // Build edges
+        const prefEdges = [];
+        const avoidEdges = [];
+        students.forEach((st) => {
+          const surv = ws.surveys[st.id];
+          if (!surv) return;
+          (surv.prefer || []).forEach((targetId, rank) => {
+            if (targetId && getStudentById(ws, targetId)) {
+              prefEdges.push({ source: st.id, target: targetId, weight: rank === 0 ? 1.5 : rank === 1 ? 1.1 : 0.8 });
+            }
+          });
+          (surv.avoid || []).forEach((targetId) => {
+            if (targetId && getStudentById(ws, targetId)) {
+              avoidEdges.push({ source: st.id, target: targetId });
+            }
+          });
+        });
+
+        // 180-iteration Fruchterman-Reingold style layout with non-overlapping radius enforcement
+        const ITER = 180;
+        const idealDist = Math.sqrt((W * H) / Math.max(students.length, 4)) * 0.72;
+
+        for (let iter = 0; iter < ITER; iter++) {
+          const cooling = 1 - iter / (ITER + 15);
+          const disp = {};
+          students.forEach((s) => {
+            disp[s.id] = { dx: 0, dy: 0 };
+          });
+
+          // Repulsion between all pairs
+          for (let i = 0; i < students.length; i++) {
+            for (let j = i + 1; j < students.length; j++) {
+              const idA = students[i].id;
+              const idB = students[j].id;
+              let vx = posMap[idA].x - posMap[idB].x;
+              let vy = posMap[idA].y - posMap[idB].y;
+              let dist = Math.hypot(vx, vy) || 0.1;
+
+              // Strong short-range repulsion so r=36 nodes never overlap
+              const minSep = 118;
+              let repForce = (idealDist * idealDist) / dist;
+              if (dist < minSep) {
+                repForce += (minSep - dist) * 18;
+              }
+              const fx = (vx / dist) * repForce * 0.045;
+              const fy = (vy / dist) * repForce * 0.045;
+              disp[idA].dx += fx;
+              disp[idA].dy += fy;
+              disp[idB].dx -= fx;
+              disp[idB].dy -= fy;
+            }
+          }
+
+          // Attraction along preferred edges
+          prefEdges.forEach(({ source, target, weight }) => {
+            if (!disp[source] || !disp[target]) return;
+            const vx = posMap[target].x - posMap[source].x;
+            const vy = posMap[target].y - posMap[source].y;
+            const dist = Math.hypot(vx, vy) || 0.1;
+            const targetLen = 195;
+            const attForce = (dist - targetLen) * 0.032 * weight;
+            const fx = (vx / dist) * attForce;
+            const fy = (vy / dist) * attForce;
+            disp[source].dx += fx;
+            disp[source].dy += fy;
+            disp[target].dx -= fx;
+            disp[target].dy -= fy;
+          });
+
+          // Mild repulsion along avoid edges
+          avoidEdges.forEach(({ source, target }) => {
+            if (!disp[source] || !disp[target]) return;
+            const vx = posMap[source].x - posMap[target].x;
+            const vy = posMap[source].y - posMap[target].y;
+            const dist = Math.hypot(vx, vy) || 0.1;
+            if (dist < 420) {
+              const push = (420 - dist) * 0.025;
+              disp[source].dx += (vx / dist) * push;
+              disp[source].dy += (vy / dist) * push;
+              disp[target].dx -= (vx / dist) * push;
+              disp[target].dy -= (vy / dist) * push;
+            }
+          });
+
+          // Gentle gravity toward center & apply displacement
+          students.forEach((s) => {
+            const p = posMap[s.id];
+            const d = disp[s.id];
+            d.dx += (W / 2 - p.x) * 0.012;
+            d.dy += (H / 2 - p.y) * 0.012;
+
+            const mag = Math.hypot(d.dx, d.dy) || 1;
+            const maxStep = 28 * cooling;
+            const step = Math.min(mag, maxStep);
+            p.x = Math.max(PAD, Math.min(W - PAD, p.x + (d.dx / mag) * step));
+            p.y = Math.max(PAD, Math.min(H - PAD, p.y + (d.dy / mag) * step));
+          });
+        }
+
+        return posMap;
+      }
+
+      function getSeatCoordinates(ws, studentId) {
+        const { rows, cols, grid } = ws.seating;
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            if (grid[r]?.[c] === studentId) {
+              return { r, c };
+            }
+          }
+        }
+        return null;
+      }
+
+      function computeSeatSafetyDiagnostics(ws, studentId) {
+        const target = getStudentById(ws, studentId);
+        if (!target) return null;
+
+        const posA = getSeatCoordinates(ws, studentId);
+        const survA = ws.surveys[studentId] || { prefer: [], avoid: [] };
+
+        const incomingPrefer = [];
+        const avoidRelations = new Map(); // otherId -> { direction, rank }
+
+        (survA.avoid || []).forEach((id, idx) => {
+          if (id && getStudentById(ws, id)) {
+            avoidRelations.set(id, { direction: '본인이 기피', rank: idx + 1 });
+          }
+        });
+
+        ws.students.forEach((other) => {
+          if (other.id === studentId) return;
+          const survO = ws.surveys[other.id];
+          if (!survO) return;
+          if (survO.prefer?.includes(studentId)) {
+            incomingPrefer.push({ student: other, rank: survO.prefer.indexOf(studentId) + 1 });
+          }
+          if (survO.avoid?.includes(studentId)) {
+            if (avoidRelations.has(other.id)) {
+              avoidRelations.get(other.id).direction = '쌍방 기피';
+            } else {
+              avoidRelations.set(other.id, { direction: '상대가 기피', rank: survO.avoid.indexOf(studentId) + 1 });
+            }
+          }
+        });
+
+        const avoidDiagnostics = [];
+        avoidRelations.forEach((info, otherId) => {
+          const otherSt = getStudentById(ws, otherId);
+          if (!otherSt) return;
+          const posB = getSeatCoordinates(ws, otherId);
+          let distanceText = '미배치 상태';
+          let euclidean = null;
+          let isSafe = true;
+
+          if (posA && posB) {
+            const dr = Math.abs(posA.r - posB.r);
+            const dc = Math.abs(posA.c - posB.c);
+            euclidean = Math.hypot(dr, dc);
+            // Adjacent (horizontal, vertical, or diagonal within 1.5 cells) is unsafe
+            isSafe = euclidean >= 1.8;
+            distanceText = `${euclidean.toFixed(1)}칸 떨어짐 (${posB.r + 1}행 ${posB.c + 1}열)`;
+          }
+
+          avoidDiagnostics.push({
+            student: otherSt,
+            direction: info.direction,
+            rank: info.rank,
+            euclidean,
+            isSafe,
+            distanceText
+          });
+        });
+
+        return {
+          student: target,
+          seatPos: posA,
+          outgoingPrefer: (survA.prefer || [])
+            .map((id, idx) => ({ student: getStudentById(ws, id), rank: idx + 1 }))
+            .filter((x) => x.student),
+          incomingPrefer,
+          avoidDiagnostics
+        };
+      }
+
+      function exportRelationshipPng2880x1920(ws) {
+        const svgEl = document.getElementById('relationship-svg-canvas');
+        if (!svgEl) {
+          showToast('관계도 캔버스를 찾을 수 없습니다.', 'error');
+          return;
+        }
+        try {
+          const clone = svgEl.cloneNode(true);
+          clone.setAttribute('width', '2880');
+          clone.setAttribute('height', '1920');
+          const serializer = new XMLSerializer();
+          const svgString = serializer.serializeToString(clone);
+          const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+          const url = URL.createObjectURL(svgBlob);
+
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 2880;
+            canvas.height = 1920;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 2880, 1920);
+            ctx.drawImage(img, 0, 0, 2880, 1920);
+            URL.revokeObjectURL(url);
+
+            canvas.toBlob((blob) => {
+              if (!blob) {
+                showToast('PNG 이미지 변환에 실패했습니다.', 'error');
+                return;
+              }
+              const dlUrl = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = dlUrl;
+              a.download = `${ws.name}_학급인물관계도_2880x1920.png`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(dlUrl);
+              showToast('🖼️ 2880×1920 고해상도 PNG 이미지가 저장되었습니다!', 'success');
+            }, 'image/png');
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(url);
+            showToast('이미지 렌더링 중 오류가 발생했습니다.', 'error');
+          };
+          img.src = url;
+        } catch (e) {
+          showToast('PNG 내보내기 중 오류가 발생했습니다.', 'error');
+        }
+      }
+
+      /* =========================================================================
+       * 6. CSV EXPORT & AWARDS AGGREGATION
+       * ========================================================================= */
+      function exportSeatingCsv(ws) {
+        const { cols, rows, grid } = ws.seating;
+        const lines = [];
+        lines.push([`${ws.name} (${ws.code}) 자리배치표`, `기준: ${ws.seating.lastAlgorithm}`].join(','));
+        const header = ['행\\열'];
+        for (let c = 0; c < cols; c++) {
+          header.push(`${c + 1}열`);
+        }
+        lines.push(header.join(','));
+
+        for (let r = 0; r < rows; r++) {
+          const rowCells = [`${r + 1}행`];
+          for (let c = 0; c < cols; c++) {
+            const st = getStudentById(ws, grid[r]?.[c]);
+            rowCells.push(st ? `"${st.num}번 ${st.name}"` : '""');
+          }
+          lines.push(rowCells.join(','));
+        }
+
+        const bom = '\uFEFF';
+        const blob = new Blob([bom + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${ws.name}_자리배치표.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('📥 CSV 파일이 다운로드되었습니다.', 'success');
+      }
+
+      function computeAwardRankings(ws) {
+        const tally = {};
+        ws.students.forEach((s) => {
+          tally[s.id] = {
+            student: s,
+            votes: 0,
+            badges: [],
+            messages: []
+          };
+        });
+
+        Object.values(ws.surveys).forEach((surv) => {
+          if (surv.bestStudentId && tally[surv.bestStudentId]) {
+            tally[surv.bestStudentId].votes += 1;
+            if (surv.bestBadge) {
+              tally[surv.bestStudentId].badges.push(surv.bestBadge);
+            }
+            if (surv.message && surv.message.trim()) {
+              tally[surv.bestStudentId].messages.push(surv.message.trim());
+            }
+          }
+        });
+
+        return Object.values(tally)
+          .filter((item) => item.votes > 0)
+          .sort((a, b) => b.votes - a.votes || a.student.num - b.student.num);
+      }
+
+      /* =========================================================================
+       * 7. VIEW RENDERERS
+       * ========================================================================= */
+
+      /**
+       * 7-A. PEACH 3-STEP STUDENT SECRET SURVEY VIEW
+       * Strictly separates:
+       *  1) Real student URL (?mode=student): NO teacher return button, NO preview banner!
+       *     Only has a subtle hidden badge (5 consecutive taps) + Ctrl+Shift+L shortcut for accidental teacher visits.
+       *  2) Teacher preview mode (previewStudentMode === true): Shows clear top preview bar with return button.
+       */
+      function renderStudentSurveyScreen(ws) {
+        const isTeacherPreview = !state.isStudentUrlMode && state.previewStudentMode;
+        const step = state.surveyStep;
+        const form = state.surveyForm;
+        const selectedStudent = getStudentById(ws, form.studentId);
+
+        const filteredStudents = ws.students
+          .slice()
+          .sort((a, b) => a.num - b.num)
+          .filter((s) => {
+            if (!state.surveySearch.trim()) return true;
+            const q = state.surveySearch.trim().toLowerCase();
+            return String(s.num).includes(q) || s.name.toLowerCase().includes(q);
+          });
+
+        // Helper for Step 2 option filtering (prevents self, duplicate, and cross-selection)
+        function renderFriendOptions(selectedVal, excludedSet) {
+          let html = `<option value="" ${selectedVal === '' ? 'selected' : ''}>상관없음</option>`;
+          ws.students
+            .slice()
+            .sort((a, b) => a.num - b.num)
+            .forEach((st) => {
+              const isSelf = st.id === form.studentId;
+              const isExcluded = excludedSet.has(st.id) && st.id !== selectedVal;
+              if (isSelf || isExcluded) return;
+              html += `<option value="${esc(st.id)}" ${selectedVal === st.id ? 'selected' : ''}>${st.num}번 ${esc(st.name)}</option>`;
+            });
+          return html;
+        }
+
+        const allChosenIds = new Set([...form.prefer, ...form.avoid].filter(Boolean));
+
+        return `
+          <div class="min-h-screen bg-gradient-to-br from-[#FFF6F0] via-[#FFECE2] to-[#FFE1D4] text-slate-800 flex flex-col">
+            ${
+              isTeacherPreview
+                ? `
+              <!-- Teacher-Only Preview Bar (NEVER rendered when ?mode=student is active) -->
+              <div class="sticky top-0 z-40 bg-slate-900 text-white px-4 py-3 shadow-lg border-b border-slate-700">
+                <div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                  <div class="flex items-center gap-2 text-xs sm:text-sm font-medium text-amber-300 text-center sm:text-left">
+                    <span>👀 교사 미리보기 중 — 실제 학생 링크(?mode=student)에서는 복귀 버튼이 전혀 보이지 않습니다</span>
+                  </div>
+                  <button
+                    type="button"
+                    data-action="exit-preview-mode"
+                    class="shrink-0 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs sm:text-sm transition shadow cursor-pointer"
+                  >
+                    ← 선생님 관리 화면으로 돌아가기
+                  </button>
+                </div>
+              </div>
+              `
+                : ''
+            }
+
+            <!-- Main Student Survey Container -->
+            <div class="flex-1 max-w-2xl w-full mx-auto px-4 py-6 sm:py-10 flex flex-col justify-between">
+              <div>
+                <!-- Header Card -->
+                <div class="text-center mb-6">
+                  <!-- Secret 5-tap trigger badge (indistinguishable from normal survey badge) -->
+                  <div
+                    data-action="secret-badge-tap"
+                    class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/90 border border-orange-200/80 shadow-sm text-xs font-bold text-orange-700 mb-3 select-none cursor-default"
+                  >
+                    <span>🍑</span>
+                    <span>${esc(ws.name)} · 우리 반 비밀 자리 설문</span>
+                  </div>
+                  <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                    모두의자리 비밀 설문지
+                  </h1>
+                  <p class="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">
+                    작성한 내용은 <strong class="text-orange-700 font-semibold">담임선생님만 안전하게 열람</strong>하며,<br class="sm:hidden" />
+                    같은 반 친구들에게는 절대 공개되지 않습니다.
+                  </p>
+                </div>
+
+                <!-- 3-Step Progress Indicator -->
+                ${
+                  step <= 3
+                    ? `
+                  <div class="bg-white/85 backdrop-blur rounded-2xl p-4 mb-6 border border-orange-200/70 shadow-sm">
+                    <div class="flex items-center justify-between text-xs font-bold mb-2.5">
+                      <span class="${step >= 1 ? 'text-orange-600' : 'text-slate-400'}">1단계. 나 선택</span>
+                      <span class="${step >= 2 ? 'text-orange-600' : 'text-slate-400'}">2단계. 자리 희망</span>
+                      <span class="${step >= 3 ? 'text-orange-600' : 'text-slate-400'}">3단계. 칭찬 투표</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-orange-100 rounded-full overflow-hidden">
+                      <div
+                        class="h-full bg-gradient-to-r from-orange-400 to-rose-400 rounded-full transition-all duration-300"
+                        style="width: ${step === 1 ? '33.3%' : step === 2 ? '66.6%' : '100%'}"
+                      ></div>
+                    </div>
+                  </div>
+                  `
+                    : ''
+                }
+
+                <!-- STEP 1: SELECT STUDENT -->
+                ${
+                  step === 1
+                    ? `
+                  <div class="bg-white rounded-3xl p-5 sm:p-7 shadow-md border border-orange-200/70 animate-fade-in">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                      <div>
+                        <span class="text-xs font-extrabold uppercase tracking-wider text-orange-500">STEP 1</span>
+                        <h2 class="text-lg sm:text-xl font-bold text-slate-900">본인의 학번과 이름을 선택해 주세요</h2>
+                      </div>
+                      <input
+                        type="text"
+                        data-action="survey-search-input"
+                        value="${esc(state.surveySearch)}"
+                        placeholder="번호 또는 이름 검색..."
+                        class="w-full sm:w-48 px-3.5 py-2 rounded-xl border border-orange-200 bg-orange-50/40 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      />
+                    </div>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-80 overflow-y-auto pr-1">
+                      ${filteredStudents
+                        .map((st) => {
+                          const isSelected = form.studentId === st.id;
+                          const alreadySubmitted = Boolean(ws.surveys[st.id]);
+                          return `
+                            <button
+                              type="button"
+                              data-action="survey-select-student"
+                              data-student-id="${esc(st.id)}"
+                              class="p-3 rounded-2xl border text-left transition flex items-center justify-between cursor-pointer ${
+                                isSelected
+                                  ? 'bg-gradient-to-r from-orange-500 to-rose-500 text-white border-orange-500 shadow-md'
+                                  : 'bg-orange-50/40 hover:bg-orange-100/70 text-slate-800 border-orange-200/70'
+                              }"
+                            >
+                              <div>
+                                <div class="text-xs ${isSelected ? 'text-orange-100' : 'text-slate-500'} font-semibold">${st.num}번</div>
+                                <div class="font-bold text-sm sm:text-base">${esc(st.name)}</div>
+                              </div>
+                              ${
+                                alreadySubmitted
+                                  ? `<span class="text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                                      isSelected ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-700'
+                                    }">제출됨</span>`
+                                  : ''
+                              }
+                            </button>
+                          `;
+                        })
+                        .join('')}
+                    </div>
+
+                    <div class="mt-6 flex justify-end">
+                      <button
+                        type="button"
+                        data-action="survey-next-step"
+                        data-target-step="2"
+                        class="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white font-bold text-sm sm:text-base shadow-md transition cursor-pointer"
+                      >
+                        다음 단계로 (자리 희망 선택) →
+                      </button>
+                    </div>
+                  </div>
+                  `
+                    : ''
+                }
+
+                <!-- STEP 2: PREFERRED & AVOIDED FRIENDS (DEFAULT '상관없음', NO DUPLICATES) -->
+                ${
+                  step === 2
+                    ? `
+                  <div class="bg-white rounded-3xl p-5 sm:p-7 shadow-md border border-orange-200/70 animate-fade-in">
+                    <div class="mb-5 pb-4 border-b border-orange-100 flex items-center justify-between">
+                      <div>
+                        <span class="text-xs font-extrabold uppercase tracking-wider text-orange-500">STEP 2</span>
+                        <h2 class="text-lg sm:text-xl font-bold text-slate-900">
+                          ${selectedStudent ? `${selectedStudent.num}번 ${esc(selectedStudent.name)}` : ''} 학생의 자리 희망
+                        </h2>
+                      </div>
+                      <span class="text-xs px-3 py-1 rounded-full bg-orange-100 text-orange-800 font-semibold">중복 자동 방지</span>
+                    </div>
+
+                    <!-- Preferred Friends -->
+                    <div class="mb-6">
+                      <h3 class="text-sm sm:text-base font-bold text-emerald-800 flex items-center gap-1.5 mb-1">
+                        <span>💚 함께 앉고 싶은 친구 (1~3순위)</span>
+                      </h3>
+                      <p class="text-xs text-slate-500 mb-3">특별히 희망하는 친구가 없으면 <strong>‘상관없음’</strong>으로 두어도 괜찮습니다.</p>
+                      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        ${[0, 1, 2]
+                          .map(
+                            (idx) => `
+                          <div class="bg-emerald-50/60 p-3 rounded-2xl border border-emerald-200/80">
+                            <label class="block text-xs font-bold text-emerald-700 mb-1.5">${idx + 1}순위 희망</label>
+                            <select
+                              data-action="survey-change-prefer"
+                              data-rank="${idx}"
+                              class="w-full px-3 py-2.5 rounded-xl bg-white border border-emerald-200 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                            >
+                              ${renderFriendOptions(form.prefer[idx], allChosenIds)}
+                            </select>
+                          </div>
+                        `
+                          )
+                          .join('')}
+                      </div>
+                    </div>
+
+                    <!-- Avoided Friends -->
+                    <div class="mb-6">
+                      <h3 class="text-sm sm:text-base font-bold text-rose-800 flex items-center gap-1.5 mb-1">
+                        <span>🛡️ 피하고 싶은 친구 (1~3순위 · 비밀 보장)</span>
+                      </h3>
+                      <p class="text-xs text-slate-500 mb-3">자리 배치 시 거리를 두어 배려합니다. 없으면 <strong>‘상관없음’</strong>을 유지하세요.</p>
+                      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        ${[0, 1, 2]
+                          .map(
+                            (idx) => `
+                          <div class="bg-rose-50/60 p-3 rounded-2xl border border-rose-200/80">
+                            <label class="block text-xs font-bold text-rose-700 mb-1.5">${idx + 1}순위 피하고 싶음</label>
+                            <select
+                              data-action="survey-change-avoid"
+                              data-rank="${idx}"
+                              class="w-full px-3 py-2.5 rounded-xl bg-white border border-rose-200 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-400"
+                            >
+                              ${renderFriendOptions(form.avoid[idx], allChosenIds)}
+                            </select>
+                          </div>
+                        `
+                          )
+                          .join('')}
+                      </div>
+                    </div>
+
+                    <div class="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-2">
+                      <button
+                        type="button"
+                        data-action="survey-prev-step"
+                        data-target-step="1"
+                        class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition cursor-pointer"
+                      >
+                        ← 이전 단계
+                      </button>
+                      <button
+                        type="button"
+                        data-action="survey-next-step"
+                        data-target-step="3"
+                        class="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white font-bold text-sm sm:text-base shadow-md transition cursor-pointer"
+                      >
+                        다음 단계로 (이달의 최고의 학생 투표) →
+                      </button>
+                    </div>
+                  </div>
+                  `
+                    : ''
+                }
+
+                <!-- STEP 3: STUDENT OF THE MONTH GIFT VOTE & SECRET MESSAGE -->
+                ${
+                  step === 3
+                    ? `
+                  <div class="bg-white rounded-3xl p-5 sm:p-7 shadow-md border border-orange-200/70 animate-fade-in">
+                    <div class="mb-5 pb-4 border-b border-orange-100">
+                      <span class="text-xs font-extrabold uppercase tracking-wider text-orange-500">STEP 3</span>
+                      <h2 class="text-lg sm:text-xl font-bold text-slate-900">🎁 이달의 최고의 학생 선물 투표 & 비밀 응원</h2>
+                      <p class="text-xs sm:text-sm text-slate-500 mt-1">이번 달 우리 반을 따뜻하게 만들어 준 친구에게 칭찬 표와 비밀 메시지를 보내주세요!</p>
+                    </div>
+
+                    <div class="space-y-4">
+                      <div>
+                        <label class="block text-xs sm:text-sm font-bold text-slate-700 mb-1.5">칭찬 선물을 주고 싶은 친구</label>
+                        <select
+                          data-action="survey-change-best"
+                          class="w-full px-4 py-3 rounded-2xl bg-amber-50/60 border border-amber-200 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        >
+                          <option value="">선택 안 함</option>
+                          ${ws.students
+                            .slice()
+                            .sort((a, b) => a.num - b.num)
+                            .filter((st) => st.id !== form.studentId)
+                            .map(
+                              (st) =>
+                                `<option value="${esc(st.id)}" ${form.bestStudentId === st.id ? 'selected' : ''}>${st.num}번 ${esc(st.name)}</option>`
+                            )
+                            .join('')}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label class="block text-xs sm:text-sm font-bold text-slate-700 mb-1.5">칭찬 타이틀 선택</label>
+                        <div class="flex flex-wrap gap-2">
+                          ${['다정·배려왕', '분위기 메이커', '학습 멘토왕', '묵묵한 성실왕', '든든한 리더']
+                            .map((badge) => {
+                              const active = form.bestBadge === badge;
+                              return `
+                                <button
+                                  type="button"
+                                  data-action="survey-select-badge"
+                                  data-badge="${esc(badge)}"
+                                  class="px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                                    active
+                                      ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                                      : 'bg-amber-50/50 text-amber-900 border-amber-200 hover:bg-amber-100'
+                                  }"
+                                >
+                                  ✨ ${esc(badge)}
+                                </button>
+                              `;
+                            })
+                            .join('')}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label class="block text-xs sm:text-sm font-bold text-slate-700 mb-1.5">친구 또는 담임선생님께 전하는 비밀 응원 메시지</label>
+                        <textarea
+                          rows="3"
+                          data-action="survey-change-message"
+                          placeholder="예: 항상 밝게 인사해 주고 모둠 활동 때 도와줘서 고마워!"
+                          class="w-full px-4 py-3 rounded-2xl bg-orange-50/40 border border-orange-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                        >${esc(form.message)}</textarea>
+                      </div>
+                    </div>
+
+                    <div class="mt-6 flex flex-col-reverse sm:flex-row items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        data-action="survey-prev-step"
+                        data-target-step="2"
+                        class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition cursor-pointer"
+                      >
+                        ← 이전 단계
+                      </button>
+                      <button
+                        type="button"
+                        data-action="survey-submit"
+                        class="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white font-extrabold text-sm sm:text-base shadow-lg transition cursor-pointer"
+                      >
+                        💌 비밀 설문 제출하기
+                      </button>
+                    </div>
+                  </div>
+                  `
+                    : ''
+                }
+
+                <!-- STEP 4: SUBMISSION COMPLETE -->
+                ${
+                  step === 4
+                    ? `
+                  <div class="bg-white rounded-3xl p-7 sm:p-10 shadow-md border border-orange-200/70 text-center animate-fade-in">
+                    <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-3xl shadow-inner">
+                      🎉
+                    </div>
+                    <h2 class="text-xl sm:text-2xl font-extrabold text-slate-900">설문이 안전하게 제출되었습니다!</h2>
+                    <p class="mt-2 text-sm text-slate-600 leading-relaxed">
+                      <strong>${selectedStudent ? `${selectedStudent.num}번 ${esc(selectedStudent.name)}` : ''}</strong> 학생의 소중한 의견이 암호화되어 담임선생님께 전달되었습니다.<br />
+                      기기를 다음 친구에게 넘겨주거나 창을 닫아도 됩니다.
+                    </p>
+                    <div class="mt-7">
+                      <button
+                        type="button"
+                        data-action="survey-reset-for-next"
+                        class="px-6 py-3 rounded-2xl bg-orange-100 hover:bg-orange-200 text-orange-800 font-bold text-sm transition cursor-pointer"
+                      >
+                        처음 화면으로 (다른 학생 작성하기)
+                      </button>
+                    </div>
+                  </div>
+                  `
+                    : ''
+                }
+              </div>
+
+              <!-- Minimal Student Footer (NO Teacher Return Link!) -->
+              <footer class="mt-8 text-center text-[11px] text-orange-900/50">
+                모두의자리(Modu's Seat) · 학급 소통 및 배려 자리배치 시스템
+              </footer>
+            </div>
+          </div>
+        `;
+      }
+
+      /**
+       * 7-B. SECRET PIN MODAL (ONLY opened via 5-tap on survey badge or Ctrl+Shift+L in ?mode=student)
+       */
+      function renderSecretPinModal(ws) {
+        if (!state.showSecretPinModal) return '';
+        return `
+          <div class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+            <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200">
+              <div class="flex items-center justify-between mb-3">
+                <span class="px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold">🔐 담임교사 인증</span>
+                <button
+                  type="button"
+                  data-action="close-secret-pin-modal"
+                  class="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-500 font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+              <h3 class="text-lg font-extrabold text-slate-900">선생님 관리 화면 전환</h3>
+              <p class="text-xs text-slate-500 mt-1 mb-4">
+                현재 <strong>${esc(ws.name)} (${esc(ws.code)})</strong>의 담임교사 PIN 번호를 입력하면 관리 대시보드로 이동합니다.
+              </p>
+              <input
+                type="password"
+                id="secret-pin-field"
+                data-action="secret-pin-input"
+                value="${esc(state.secretPinInput)}"
+                placeholder="교사 PIN 입력 (체험반: 1234)"
+                class="w-full px-4 py-3 rounded-2xl border border-slate-300 text-center text-lg font-bold tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              ${
+                state.secretPinError
+                  ? `<p class="mt-2 text-xs font-semibold text-rose-600 text-center">${esc(state.secretPinError)}</p>`
+                  : ''
+              }
+              <div class="mt-5 flex gap-2">
+                <button
+                  type="button"
+                  data-action="close-secret-pin-modal"
+                  class="flex-1 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  data-action="submit-secret-pin"
+                  class="flex-1 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow cursor-pointer"
+                >
+                  인증 및 입장
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      /**
+       * 7-C. MULTI-CLASS WORKSPACE GATE (TEACHER LOGIN / CREATE CLASS)
+       */
+      function renderWorkspaceGate() {
+        const classList = Object.values(state.workspaces);
+        return `
+          <div class="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex items-center justify-center p-4">
+            <div class="max-w-4xl w-full grid grid-cols-1 lg:grid-cols-12 bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200/80 animate-fade-in">
+              <!-- Left Brand Column -->
+              <div class="lg:col-span-5 bg-gradient-to-br from-indigo-600 to-violet-700 text-white p-7 sm:p-9 flex flex-col justify-between">
+                <div>
+                  <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-xs font-bold mb-4">
+                    <span>🏫</span>
+                    <span>중학교 학급 자리배치 & 비밀 설문</span>
+                  </div>
+                  <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight leading-snug">
+                    모두의자리<br />
+                    <span class="text-indigo-200 text-xl font-bold">Modu's Seat</span>
+                  </h1>
+                  <p class="mt-3 text-xs sm:text-sm text-indigo-100 leading-relaxed">
+                    패들렛 실시간 비밀 설문 수집부터 5,000회 시뮬레이티드 어닐링 자리 최적화, 고가독성 학급 인물관계도까지 한 번에 관리하세요.
+                  </p>
+                </div>
+
+                <div class="mt-8 space-y-3 text-xs bg-white/10 rounded-2xl p-4 border border-white/15">
+                  <div class="font-bold text-amber-200">💡 체험용 기본 학급 바로가기</div>
+                  <div class="flex items-center justify-between">
+                    <span>학급 코드: <strong class="font-mono text-white">MODU2026</strong></span>
+                    <span>PIN: <strong class="font-mono text-white">1234</strong></span>
+                  </div>
+                  <p class="text-[11px] text-indigo-100/90">가상 중학생 25명 명단과 설문 데이터가 탑재되어 있어 즉시 모든 기능을 체험할 수 있습니다.</p>
+                </div>
+              </div>
+
+              <!-- Right Auth / Create Column -->
+              <div class="lg:col-span-7 p-6 sm:p-9">
+                <div class="flex gap-2 p-1 bg-slate-100 rounded-2xl mb-6">
+                  <button
+                    type="button"
+                    data-action="gate-switch-tab"
+                    data-tab="login"
+                    class="flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+                      state.gateTab === 'login' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                    }"
+                  >
+                    🔐 기존 학급 워크스페이스 접속
+                  </button>
+                  <button
+                    type="button"
+                    data-action="gate-switch-tab"
+                    data-tab="create"
+                    class="flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+                      state.gateTab === 'create' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                    }"
+                  >
+                    ➕ 새 학급 개설하기
+                  </button>
+                </div>
+
+                ${
+                  state.gateTab === 'login'
+                    ? `
+                  <div class="space-y-4">
+                    <div>
+                      <label class="block text-xs font-bold text-slate-700 mb-1.5">개설된 학급 선택</label>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                        ${classList
+                          .map(
+                            (ws) => `
+                          <button
+                            type="button"
+                            data-action="gate-select-class"
+                            data-code="${esc(ws.code)}"
+                            class="p-3 rounded-2xl border text-left transition cursor-pointer ${
+                              state.loginClassCode === ws.code
+                                ? 'bg-indigo-50 border-indigo-500 text-indigo-950 shadow-sm'
+                                : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
+                            }"
+                          >
+                            <div class="text-[11px] font-mono font-bold text-indigo-600">${esc(ws.code)}</div>
+                            <div class="font-bold text-sm truncate">${esc(ws.name)}</div>
+                            <div class="text-[11px] text-slate-500 mt-0.5">학생 ${ws.students.length}명 · 응답 ${Object.keys(ws.surveys).length}건</div>
+                          </button>
+                        `
+                          )
+                          .join('')}
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">학급 코드</label>
+                        <input
+                          type="text"
+                          data-action="gate-login-code"
+                          value="${esc(state.loginClassCode)}"
+                          placeholder="예: MODU2026"
+                          class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-mono uppercase text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">담임교사 PIN 번호</label>
+                        <input
+                          type="password"
+                          data-action="gate-login-pin"
+                          value="${esc(state.loginPin)}"
+                          placeholder="PIN 입력 (체험반: 1234)"
+                          class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                    </div>
+
+                    ${
+                      state.loginError
+                        ? `<p class="text-xs font-semibold text-rose-600">${esc(state.loginError)}</p>`
+                        : ''
+                    }
+
+                    <div class="pt-2 flex flex-col sm:flex-row gap-2.5">
+                      <button
+                        type="button"
+                        data-action="gate-submit-login"
+                        class="flex-1 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm shadow-md transition cursor-pointer"
+                      >
+                        선생님 관리 화면 입장 →
+                      </button>
+                      <button
+                        type="button"
+                        data-action="gate-demo-quick-login"
+                        class="px-4 py-3.5 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs sm:text-sm transition cursor-pointer"
+                      >
+                        ⚡ 체험 반 원클릭 입장
+                      </button>
+                    </div>
+                  </div>
+                  `
+                    : `
+                  <div class="space-y-3.5">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">학급 코드 (영문/숫자)</label>
+                        <input
+                          type="text"
+                          data-action="gate-new-code"
+                          value="${esc(state.newClassCode)}"
+                          placeholder="예: CLASS205"
+                          class="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono uppercase text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">학급명</label>
+                        <input
+                          type="text"
+                          data-action="gate-new-name"
+                          value="${esc(state.newClassName)}"
+                          placeholder="예: 2학년 5반"
+                          class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">담임교사 PIN (4자리+)</label>
+                        <input
+                          type="password"
+                          data-action="gate-new-pin"
+                          value="${esc(state.newClassPin)}"
+                          placeholder="예: 2580"
+                          class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label class="block text-xs font-bold text-slate-700 mb-1">학생 명단 일괄 입력 (한 줄에 "번호 이름" 형식)</label>
+                      <textarea
+                        rows="4"
+                        data-action="gate-new-roster"
+                        class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >${esc(state.newClassRosterText)}</textarea>
+                    </div>
+
+                    ${
+                      state.createError
+                        ? `<p class="text-xs font-semibold text-rose-600">${esc(state.createError)}</p>`
+                        : ''
+                    }
+
+                    <button
+                      type="button"
+                      data-action="gate-submit-create"
+                      class="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm shadow-md transition cursor-pointer"
+                    >
+                      ✨ 새 학급 개설 및 대시보드 시작
+                    </button>
+                  </div>
+                  `
+                }
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      /**
+       * 7-D. TEACHER DASHBOARD: SUB-VIEWS
+       */
+      function renderSeatingStudioTab(ws) {
+        const { mode, cols, rows, grid, pinned, lastAlgorithm } = ws.seating;
+        const unplaced = getUnplacedStudents(ws);
+        const warnings = getSeatAvoidWarnings(ws);
+        const report = computeSeatingReport(ws);
+        const hideSens = state.tvHideSensitive;
+
+        // Build classroom seating grid HTML
+        let gridHtml = '';
+        if (mode === 'single') {
+          // 1인 책상 분단형
+          gridHtml = `
+            <div class="grid gap-2.5 sm:gap-3" style="grid-template-columns: repeat(${cols}, minmax(0, 1fr));">
+              ${Array.from({ length: rows })
+                .map((_, r) =>
+                  Array.from({ length: cols })
+                    .map((__, c) => renderSingleDeskCard(ws, r, c, grid[r]?.[c], pinned, warnings, hideSens))
+                    .join('')
+                )
+                .join('')}
+            </div>
+          `;
+        } else {
+          // 2인 1조 짝꿍형 (Group columns into pairs of 2)
+          const numGroups = Math.ceil(cols / 2);
+          gridHtml = `
+            <div class="grid gap-4 sm:gap-6" style="grid-template-columns: repeat(${numGroups}, minmax(0, 1fr));">
+              ${Array.from({ length: numGroups })
+                .map((_, gIdx) => {
+                  const c1 = gIdx * 2;
+                  const c2 = gIdx * 2 + 1;
+                  return `
+                    <div class="bg-slate-100/80 p-2.5 rounded-2xl border border-slate-200/80 space-y-2.5">
+                      <div class="text-center text-[11px] font-extrabold text-indigo-700 tracking-wide">${gIdx + 1}분단 (짝꿍석)</div>
+                      ${Array.from({ length: rows })
+                        .map((__, r) => `
+                          <div class="grid grid-cols-2 gap-1.5">
+                            ${renderSingleDeskCard(ws, r, c1, grid[r]?.[c1], pinned, warnings, hideSens)}
+                            ${
+                              c2 < cols
+                                ? renderSingleDeskCard(ws, r, c2, grid[r]?.[c2], pinned, warnings, hideSens)
+                                : '<div></div>'
+                            }
+                          </div>
+                        `)
+                        .join('')}
+                    </div>
+                  `;
+                })
+                .join('')}
+            </div>
+          `;
+        }
+
+        return `
+          <div class="space-y-6 animate-fade-in">
+            <!-- Control Toolbar (Hidden on A4 Print) -->
+            <div class="no-print bg-white rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-200/80 space-y-4">
+              <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                <!-- Layout Type & Dimensions -->
+                <div class="flex flex-wrap items-center gap-2.5">
+                  <div class="inline-flex rounded-2xl bg-slate-100 p-1">
+                    <button
+                      type="button"
+                      data-action="seating-set-mode"
+                      data-mode="single"
+                      class="px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                        mode === 'single' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                      }"
+                    >
+                      🪑 1인 책상 분단형
+                    </button>
+                    <button
+                      type="button"
+                      data-action="seating-set-mode"
+                      data-mode="pair"
+                      class="px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                        mode === 'pair' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                      }"
+                    >
+                      🧑‍🤝‍🧑 2인 1조 짝꿍형
+                    </button>
+                  </div>
+
+                  <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-2xl border border-slate-200 text-xs font-bold">
+                    <label class="text-slate-600">열:</label>
+                    <select
+                      data-action="seating-change-cols"
+                      class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-800 font-bold"
+                    >
+                      ${(mode === 'pair' ? [4, 6, 8, 10] : [3, 4, 5, 6, 7, 8])
+                        .map(
+                          (n) =>
+                            `<option value="${n}" ${cols === n ? 'selected' : ''}>${
+                              mode === 'pair' ? `${n}열 (${n / 2}분단)` : `${n}열`
+                            }</option>`
+                        )
+                        .join('')}
+                    </select>
+                    <label class="text-slate-600 ml-1">행:</label>
+                    <select
+                      data-action="seating-change-rows"
+                      class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-800 font-bold"
+                    >
+                      ${[3, 4, 5, 6, 7, 8]
+                        .map((n) => `<option value="${n}" ${rows === n ? 'selected' : ''}>${n}행</option>`)
+                        .join('')}
+                    </select>
+                  </div>
+                </div>
+
+                <!-- TV Hide Mode, CSV & A4 Print -->
+                <div class="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    data-action="seating-toggle-tv-hide"
+                    class="px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                      hideSens
+                        ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }"
+                  >
+                    ${hideSens ? '🙈 TV 송출 가리기 ON' : '📺 TV 송출용 성적·핀 가리기'}
+                  </button>
+                  <button
+                    type="button"
+                    data-action="seating-export-csv"
+                    class="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition cursor-pointer"
+                  >
+                    📥 CSV 다운로드
+                  </button>
+                  <button
+                    type="button"
+                    data-action="seating-print"
+                    class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition cursor-pointer"
+                  >
+                    🖨️ A4 인쇄
+                  </button>
+                </div>
+              </div>
+
+              <!-- 3 Simulated Annealing Optimization Buttons -->
+              <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <div class="text-xs font-extrabold text-indigo-700">⚡ 5,000회 시뮬레이티드 어닐링 AI 자동 자리배치</div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">
+                    📌 앞자리 고정 학생은 위치를 유지하며, 기피 친구 인접을 자동 회피합니다. (현재: <strong>${esc(lastAlgorithm)}</strong>)
+                  </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    data-action="seating-optimize"
+                    data-strategy="mentor"
+                    class="px-4 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold shadow-sm transition cursor-pointer"
+                  >
+                    🤝 멘토-멘티 짝꿍 매칭
+                  </button>
+                  <button
+                    type="button"
+                    data-action="seating-optimize"
+                    data-strategy="balanced"
+                    class="px-4 py-2.5 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-extrabold shadow-sm transition cursor-pointer"
+                  >
+                    ⚖️ 성적 고른 분포
+                  </button>
+                  <button
+                    type="button"
+                    data-action="seating-optimize"
+                    data-strategy="preferred"
+                    class="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-sm transition cursor-pointer"
+                  >
+                    💚 선호 친구 우선
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Main Classroom Chalkboard + Seating Chart -->
+            <div class="print-sheet bg-white rounded-3xl p-4 sm:p-7 shadow-sm border border-slate-200/80">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h2 class="text-base sm:text-lg font-extrabold text-slate-900">${esc(ws.name)} 자리배치도</h2>
+                  <p class="no-print text-xs text-slate-500">
+                    카드를 <strong>드래그 앤 드롭</strong>하거나 <strong>두 자리를 차례로 클릭</strong>해 위치를 바꿀 수 있습니다.
+                  </p>
+                </div>
+                <span class="text-xs font-semibold text-slate-400">${new Date().toLocaleDateString('ko-KR')}</span>
+              </div>
+
+              <!-- Chalkboard (칠판 / 교탁) -->
+              <div class="max-w-xl mx-auto mb-6">
+                <div class="bg-gradient-to-r from-emerald-800 via-emerald-700 to-emerald-800 text-white text-center py-3 rounded-2xl shadow-inner border-4 border-amber-800/70 font-extrabold tracking-widest text-sm sm:text-base">
+                  칠 판 / 교 탁 (앞쪽)
+                </div>
+              </div>
+
+              <!-- Desk Grid -->
+              <div class="overflow-x-auto pb-2">
+                <div class="min-w-[600px]">
+                  ${gridHtml}
+                </div>
+              </div>
+
+              <!-- Unplaced Students Bench (Hidden on print if empty) -->
+              ${
+                unplaced.length > 0
+                  ? `
+                <div class="no-print mt-6 pt-4 border-t border-slate-200">
+                  <div class="text-xs font-bold text-slate-700 mb-2">🪑 미배치 대기석 (${unplaced.length}명) — 빈 책상을 클릭하거나 드래그하여 배치하세요</div>
+                  <div class="flex flex-wrap gap-2">
+                    ${unplaced
+                      .map((st) => {
+                        const isSelected = state.selectedSeat && state.selectedSeat.unplacedId === st.id;
+                        return `
+                          <button
+                            type="button"
+                            draggable="true"
+                            data-action="seating-click-unplaced"
+                            data-student-id="${esc(st.id)}"
+                            data-drag-type="unplaced"
+                            class="px-3 py-2 rounded-xl border text-xs font-bold transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow'
+                                : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                            }"
+                          >
+                            ${st.num}번 ${esc(st.name)}
+                          </button>
+                        `;
+                      })
+                      .join('')}
+                  </div>
+                </div>
+                `
+                  : ''
+              }
+            </div>
+
+            <!-- Seating Placement Analysis Report (Hidden in TV Hide Mode or Print) -->
+            ${
+              !hideSens
+                ? `
+              <div class="no-print bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200/80">
+                <h3 class="text-sm sm:text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
+                  <span>📊 성적 · 멘토멘티 · 관계 배치 분석 리포트</span>
+                </h3>
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                  <div class="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200">
+                    <div class="text-xs font-bold text-emerald-700">선호 친구 인접 매칭</div>
+                    <div class="mt-1 text-2xl font-extrabold text-emerald-950">${report.preferredMatches}쌍</div>
+                    <div class="text-[11px] text-emerald-700 mt-0.5">1순위 희망 성사: ${report.firstChoiceMatches}건 (만족도 ${report.satisfactionRate}%)</div>
+                  </div>
+                  <div class="p-4 rounded-2xl ${
+                    report.avoidConflicts > 0 ? 'bg-rose-50 border-rose-300' : 'bg-slate-50 border-slate-200'
+                  } border">
+                    <div class="text-xs font-bold ${report.avoidConflicts > 0 ? 'text-rose-700' : 'text-slate-600'}">기피 친구 인접 충돌</div>
+                    <div class="mt-1 text-2xl font-extrabold ${report.avoidConflicts > 0 ? 'text-rose-700' : 'text-slate-900'}">${report.avoidConflicts}건</div>
+                    <div class="text-[11px] ${report.avoidConflicts > 0 ? 'text-rose-600 font-semibold' : 'text-slate-500'} mt-0.5">
+                      ${report.avoidConflicts > 0 ? '⚠️ 경고 표시된 좌석을 교체해 주세요' : '✅ 기피 인접 충돌 0건 (안전)'}
+                    </div>
+                  </div>
+                  <div class="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200">
+                    <div class="text-xs font-bold text-indigo-700">멘토-멘티 짝꿍 매칭</div>
+                    <div class="mt-1 text-2xl font-extrabold text-indigo-950">${report.mentorMenteeMatches}조</div>
+                    <div class="text-[11px] text-indigo-700 mt-0.5">학습/생활 멘토링 인접 성사</div>
+                  </div>
+                  <div class="p-4 rounded-2xl bg-violet-50/70 border border-violet-200">
+                    <div class="text-xs font-bold text-violet-700">분단·행 성적 균형 지수</div>
+                    <div class="mt-1 text-2xl font-extrabold text-violet-950">${report.balanceScore}점</div>
+                    <div class="text-[11px] text-violet-700 mt-0.5">상·중·하 성적 고른 분포도</div>
+                  </div>
+                </div>
+              </div>
+              `
+                : ''
+            }
+          </div>
+        `;
+      }
+
+      function renderSingleDeskCard(ws, r, c, studentId, pinnedMap, warningsMap, hideSens) {
+        const st = getStudentById(ws, studentId);
+        const isSelected =
+          state.selectedSeat && state.selectedSeat.r === r && state.selectedSeat.c === c;
+        const isPinned = st && Boolean(pinnedMap[st.id]);
+        const warnList = st ? warningsMap[st.id] || [] : [];
+        const hasWarning = !hideSens && warnList.length > 0;
+
+        if (!st) {
+          return `
+            <div
+              data-action="seating-click-cell"
+              data-row="${r}"
+              data-col="${c}"
+              data-drop-row="${r}"
+              data-drop-col="${c}"
+              class="min-h-[76px] sm:min-h-[84px] rounded-2xl border-2 border-dashed transition flex flex-col items-center justify-center p-2 cursor-pointer ${
+                isSelected
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                  : 'border-slate-200 bg-slate-50/60 hover:bg-slate-100 text-slate-400'
+              }"
+            >
+              <span class="text-[11px] font-semibold">빈 자리</span>
+              <span class="text-[10px]">(${r + 1}-${c + 1})</span>
+            </div>
+          `;
+        }
+
+        const roleBadge =
+          st.role === 'mentor'
+            ? '<span class="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-extrabold">멘토</span>'
+            : st.role === 'mentee'
+            ? '<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-extrabold">멘티</span>'
+            : '';
+
+        const gradeBadgeColor =
+          st.grade === '상'
+            ? 'bg-emerald-100 text-emerald-800'
+            : st.grade === '하'
+            ? 'bg-rose-100 text-rose-800'
+            : 'bg-slate-100 text-slate-700';
+
+        return `
+          <div
+            draggable="true"
+            data-action="seating-click-cell"
+            data-row="${r}"
+            data-col="${c}"
+            data-drop-row="${r}"
+            data-drop-col="${c}"
+            title="${hasWarning ? esc(warnList.join(' / ')) : `${st.num}번 ${esc(st.name)}`}"
+            class="relative min-h-[76px] sm:min-h-[84px] rounded-2xl border p-2.5 transition select-none flex flex-col justify-between cursor-pointer ${
+              isSelected
+                ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg ring-2 ring-indigo-300'
+                : hasWarning
+                ? 'bg-rose-50 text-slate-900 border-rose-400 avoid-warning-pulse'
+                : isPinned && !hideSens
+                ? 'bg-amber-50/80 text-slate-900 border-amber-400 shadow-sm'
+                : 'bg-white hover:bg-indigo-50/40 text-slate-900 border-slate-200 shadow-xs'
+            }"
+          >
+            <div class="flex items-center justify-between gap-1">
+              <span class="text-[11px] font-bold ${isSelected ? 'text-indigo-200' : 'text-slate-400'}">${st.num}번</span>
+              ${
+                !hideSens
+                  ? `
+                <button
+                  type="button"
+                  data-action="seating-toggle-pin"
+                  data-student-id="${esc(st.id)}"
+                  title="앞자리/위치 고정 토글"
+                  class="no-print px-1.5 py-0.5 rounded-lg text-xs transition cursor-pointer ${
+                    isPinned
+                      ? 'bg-amber-400 text-slate-950 font-bold shadow-xs'
+                      : isSelected
+                      ? 'bg-white/20 text-white hover:bg-white/30'
+                      : 'bg-slate-100 text-slate-400 hover:text-slate-700'
+                  }"
+                >
+                  📌
+                </button>
+                `
+                  : ''
+              }
+            </div>
+
+            <div class="text-center font-extrabold text-sm sm:text-base tracking-tight my-0.5 truncate">
+              ${esc(st.name)}
+            </div>
+
+            ${
+              !hideSens
+                ? `
+              <div class="no-print flex items-center justify-center gap-1 flex-wrap">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                  isSelected ? 'bg-white/20 text-white' : gradeBadgeColor
+                }">${esc(st.grade)}</span>
+                ${roleBadge}
+                ${
+                  hasWarning
+                    ? '<span class="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-extrabold">⚠️ 기피</span>'
+                    : ''
+                }
+              </div>
+              `
+                : '<div class="h-2"></div>'
+            }
+          </div>
+        `;
+      }
+
+      function renderRelationshipGraphTab(ws) {
+        const posMap = computeForceGraphPositions(ws, false);
+        const students = ws.students;
+        const selectedId = state.selectedGraphStudentId;
+        const diagnostic = selectedId ? computeSeatSafetyDiagnostics(ws, selectedId) : null;
+
+        // Build visual edges
+        const edgeElements = [];
+        const processedMutual = new Set();
+
+        students.forEach((stA) => {
+          const survA = ws.surveys[stA.id];
+          if (!survA) return;
+          const pA = posMap[stA.id];
+          if (!pA) return;
+
+          // Preferred edges
+          if (state.graphFilter !== 'avoid') {
+            (survA.prefer || []).forEach((idB, rankIdx) => {
+              if (!idB || !posMap[idB]) return;
+              const survB = ws.surveys[idB];
+              const isMutual = Boolean(survB?.prefer?.includes(stA.id));
+
+              if (state.graphFilter === 'mutual' && !isMutual) return;
+
+              const pB = posMap[idB];
+              const isDimmed = selectedId && selectedId !== stA.id && selectedId !== idB;
+
+              if (isMutual) {
+                const pairKey = [stA.id, idB].sort().join('-');
+                if (processedMutual.has(pairKey)) return;
+                processedMutual.add(pairKey);
+
+                edgeElements.push(`
+                  <g opacity="${isDimmed ? '0.18' : '0.92'}">
+                    <line
+                      x1="${pA.x}" y1="${pA.y}" x2="${pB.x}" y2="${pB.y}"
+                      stroke="#10b981" stroke-width="5" stroke-linecap="round"
+                    />
+                    <circle cx="${(pA.x + pB.x) / 2}" cy="${(pA.y + pB.y) / 2}" r="13" fill="#10b981" />
+                    <text
+                      x="${(pA.x + pB.x) / 2}" y="${(pA.y + pB.y) / 2 + 4}"
+                      text-anchor="middle" fill="#ffffff" font-size="12" font-weight="bold"
+                    >♥</text>
+                  </g>
+                `);
+              } else {
+                // Curved directed arrow for one-way preference
+                const mx = (pA.x + pB.x) / 2 - (pB.y - pA.y) * 0.12;
+                const my = (pA.y + pB.y) / 2 + (pB.x - pA.x) * 0.12;
+                edgeElements.push(`
+                  <g opacity="${isDimmed ? '0.14' : '0.78'}">
+                    <path
+                      d="M ${pA.x} ${pA.y} Q ${mx} ${my} ${pB.x} ${pB.y}"
+                      fill="none" stroke="#6366f1" stroke-width="${rankIdx === 0 ? 3.2 : 2.2}"
+                      marker-end="url(#arrow-prefer)"
+                    />
+                  </g>
+                `);
+              }
+            });
+          }
+
+          // Avoidance edges
+          if (state.graphFilter === 'all' || state.graphFilter === 'avoid') {
+            (survA.avoid || []).forEach((idB) => {
+              if (!idB || !posMap[idB]) return;
+              const pB = posMap[idB];
+              const isDimmed = selectedId && selectedId !== stA.id && selectedId !== idB;
+              const mx = (pA.x + pB.x) / 2 + (pB.y - pA.y) * 0.14;
+              const my = (pA.y + pB.y) / 2 - (pB.x - pA.x) * 0.14;
+              edgeElements.push(`
+                <g opacity="${isDimmed ? '0.14' : '0.85'}">
+                  <path
+                    d="M ${pA.x} ${pA.y} Q ${mx} ${my} ${pB.x} ${pB.y}"
+                    fill="none" stroke="#f43f5e" stroke-width="2.6" stroke-dasharray="8 6"
+                    marker-end="url(#arrow-avoid)"
+                  />
+                </g>
+              `);
+            });
+          }
+        });
+
+        // Build r=36 large nodes
+        const nodeElements = students
+          .map((st) => {
+            const p = posMap[st.id];
+            if (!p) return '';
+            const isSelected = selectedId === st.id;
+            const fill = isSelected
+              ? '#4f46e5'
+              : st.role === 'mentor'
+              ? '#eef2ff'
+              : st.role === 'mentee'
+              ? '#fffbeb'
+              : '#ffffff';
+            const stroke = isSelected
+              ? '#312e81'
+              : st.role === 'mentor'
+              ? '#6366f1'
+              : st.role === 'mentee'
+              ? '#f59e0b'
+              : '#64748b';
+            const textFill = isSelected ? '#ffffff' : '#0f172a';
+            const subFill = isSelected ? '#c7d2fe' : '#64748b';
+
+            return `
+              <g
+                data-action="graph-select-node"
+                data-student-id="${esc(st.id)}"
+                style="cursor: pointer;"
+              >
+                <circle
+                  cx="${p.x}" cy="${p.y}" r="36"
+                  fill="${fill}" stroke="${stroke}" stroke-width="${isSelected ? 5 : 3.5}"
+                />
+                <text
+                  x="${p.x}" y="${p.y - 6}"
+                  text-anchor="middle" fill="${subFill}" font-size="13" font-weight="700"
+                >${st.num}번</text>
+                <text
+                  x="${p.x}" y="${p.y + 14}"
+                  text-anchor="middle" fill="${textFill}" font-size="16" font-weight="800"
+                >${esc(st.name)}</text>
+              </g>
+            `;
+          })
+          .join('');
+
+        const wrapperClass = state.graphFullscreen
+          ? 'fixed inset-0 z-50 bg-slate-50 p-4 sm:p-6 flex flex-col overflow-auto'
+          : 'space-y-5 animate-fade-in';
+
+        return `
+          <div class="${wrapperClass}">
+            <!-- Graph Control Bar -->
+            <div class="bg-white rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200/80 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base sm:text-lg font-extrabold text-slate-900">🕸️ 고가독성 학급 인물관계도 (1440×960 · 대형 노드 r=36)</h2>
+                <p class="text-xs text-slate-500">학생 노드를 클릭하면 <strong>좌석 안전 분리 거리 진단 카드</strong>가 열립니다.</p>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2">
+                <!-- Filter -->
+                <div class="inline-flex rounded-xl bg-slate-100 p-1 text-xs font-bold">
+                  <button
+                    type="button"
+                    data-action="graph-set-filter"
+                    data-filter="all"
+                    class="px-3 py-1.5 rounded-lg cursor-pointer ${state.graphFilter === 'all' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}"
+                  >전체 관계</button>
+                  <button
+                    type="button"
+                    data-action="graph-set-filter"
+                    data-filter="mutual"
+                    class="px-3 py-1.5 rounded-lg cursor-pointer ${state.graphFilter === 'mutual' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600'}"
+                  >♥ 상호 선호</button>
+                  <button
+                    type="button"
+                    data-action="graph-set-filter"
+                    data-filter="avoid"
+                    class="px-3 py-1.5 rounded-lg cursor-pointer ${state.graphFilter === 'avoid' ? 'bg-white text-rose-700 shadow-xs' : 'text-slate-600'}"
+                  >⚠️ 기피 관계</button>
+                </div>
+
+                <!-- 180-Iter Auto Arrange -->
+                <button
+                  type="button"
+                  data-action="graph-rearrange"
+                  class="px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold cursor-pointer"
+                >
+                  ✨ 180회 자동 정돈
+                </button>
+
+                <!-- 80% ~ 150% Zoom -->
+                <div class="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold">
+                  <button type="button" data-action="graph-zoom-delta" data-delta="-10" class="px-1.5 hover:text-indigo-600 cursor-pointer">－</button>
+                  <span class="w-10 text-center">${state.graphZoom}%</span>
+                  <button type="button" data-action="graph-zoom-delta" data-delta="10" class="px-1.5 hover:text-indigo-600 cursor-pointer">＋</button>
+                </div>
+
+                <!-- Fullscreen Toggle -->
+                <button
+                  type="button"
+                  data-action="graph-toggle-fullscreen"
+                  class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold cursor-pointer"
+                >
+                  ${state.graphFullscreen ? '↙️ 전체화면 종료' : '⛶ 전체화면'}
+                </button>
+
+                <!-- 2880x1920 PNG Export -->
+                <button
+                  type="button"
+                  data-action="graph-export-png"
+                  class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm cursor-pointer"
+                >
+                  🖼️ 2880×1920 PNG 한 장 저장
+                </button>
+              </div>
+            </div>
+
+            <!-- SVG Canvas + Diagnostic Side Panel -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1">
+              <div class="${diagnostic ? 'lg:col-span-8' : 'lg:col-span-12'} bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-auto p-3">
+                <div style="width: ${state.graphZoom}%; min-width: 100%; transition: width 0.2s;">
+                  <svg
+                    id="relationship-svg-canvas"
+                    viewBox="0 0 1440 960"
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="w-full h-auto rounded-2xl bg-slate-50/70 border border-slate-100"
+                  >
+                    <defs>
+                      <marker id="arrow-prefer" viewBox="0 0 10 10" refX="34" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#6366f1" />
+                      </marker>
+                      <marker id="arrow-avoid" viewBox="0 0 10 10" refX="34" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#f43f5e" />
+                      </marker>
+                    </defs>
+
+                    <!-- Header inside SVG so PNG export includes title & legend -->
+                    <text x="36" y="44" fill="#0f172a" font-size="24" font-weight="800">${esc(ws.name)} 학급 인물관계도</text>
+                    <text x="36" y="70" fill="#64748b" font-size="14" font-weight="600">
+                      초록 굵은선(♥): 상호 선호 · 파랑 실선: 단방향 선호 · 빨강 점선: 기피 관계
+                    </text>
+
+                    ${edgeElements.join('')}
+                    ${nodeElements}
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Seat Safety Separation Diagnostic Card (Shown when a node is clicked) -->
+              ${
+                diagnostic
+                  ? `
+                <div class="lg:col-span-4 bg-white rounded-3xl p-5 shadow-md border border-indigo-200 flex flex-col justify-between animate-fade-in">
+                  <div>
+                    <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                      <div>
+                        <span class="text-[11px] font-extrabold text-indigo-600 uppercase">좌석 안전 분리 거리 진단 카드</span>
+                        <h3 class="text-lg font-extrabold text-slate-900">
+                          ${diagnostic.student.num}번 ${esc(diagnostic.student.name)}
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        data-action="graph-close-diagnostic"
+                        class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs cursor-pointer"
+                      >✕</button>
+                    </div>
+
+                    <div class="mt-3 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs">
+                      <span class="text-slate-500 font-semibold">현재 좌석 위치:</span>
+                      <strong class="text-slate-900 ml-1">
+                        ${diagnostic.seatPos ? `${diagnostic.seatPos.r + 1}행 ${diagnostic.seatPos.c + 1}열` : '미배치 대기석'}
+                      </strong>
+                    </div>
+
+                    <!-- Avoidance Separation Check -->
+                    <div class="mt-4">
+                      <h4 class="text-xs font-extrabold text-rose-700 mb-2">🛡️ 기피 관계 좌석 분리 안전 진단</h4>
+                      ${
+                        diagnostic.avoidDiagnostics.length === 0
+                          ? '<p class="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl">등록된 기피 관계가 없습니다.</p>'
+                          : `<div class="space-y-2">
+                              ${diagnostic.avoidDiagnostics
+                                .map(
+                                  (item) => `
+                                <div class="p-3 rounded-2xl border ${
+                                  item.isSafe ? 'bg-emerald-50/70 border-emerald-200' : 'bg-rose-50 border-rose-300'
+                                }">
+                                  <div class="flex items-center justify-between text-xs font-bold">
+                                    <span>${item.student.num}번 ${esc(item.student.name)} (${esc(item.direction)})</span>
+                                    <span class="px-2 py-0.5 rounded-full text-[11px] ${
+                                      item.isSafe ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
+                                    }">
+                                      ${item.isSafe ? '✅ 안전 분리' : '🚨 위험 인접'}
+                                    </span>
+                                  </div>
+                                  <div class="text-[11px] text-slate-600 mt-1">거리: ${esc(item.distanceText)}</div>
+                                </div>
+                              `
+                                )
+                                .join('')}
+                            </div>`
+                      }
+                    </div>
+
+                    <!-- Preferred Friends Summary -->
+                    <div class="mt-4 grid grid-cols-2 gap-2.5 text-xs">
+                      <div class="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-100">
+                        <div class="font-bold text-indigo-800 mb-1">👉 희망한 친구</div>
+                        ${
+                          diagnostic.outgoingPrefer.length === 0
+                            ? '<div class="text-slate-400">없음</div>'
+                            : diagnostic.outgoingPrefer
+                                .map((p) => `<div>${p.rank}순위: ${p.student.num}번 ${esc(p.student.name)}</div>`)
+                                .join('')
+                        }
+                      </div>
+                      <div class="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-100">
+                        <div class="font-bold text-emerald-800 mb-1">👈 나를 희망한 친구</div>
+                        ${
+                          diagnostic.incomingPrefer.length === 0
+                            ? '<div class="text-slate-400">없음</div>'
+                            : diagnostic.incomingPrefer
+                                .map((p) => `<div>${p.student.num}번 ${esc(p.student.name)} (${p.rank}순위)</div>`)
+                                .join('')
+                        }
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    data-action="switch-tab"
+                    data-tab="seating"
+                    class="mt-5 w-full py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow cursor-pointer"
+                  >
+                    🪑 자리배치 스튜디오에서 좌석 조정하기 →
+                  </button>
+                </div>
+                `
+                  : ''
+              }
+            </div>
+          </div>
+        `;
+      }
+
+      function renderSurveyAndRosterTab(ws) {
+        const shareUrl = buildStudentShareUrl(ws.code);
+        const submittedCount = Object.keys(ws.surveys).length;
+
+        return `
+          <div class="space-y-6 animate-fade-in">
+            <!-- Padlet Distribution Link Card -->
+            <div class="bg-gradient-to-r from-orange-50 to-amber-50 rounded-3xl p-5 sm:p-6 border border-orange-200 shadow-sm">
+              <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                  <span class="px-3 py-1 rounded-full bg-orange-500 text-white text-xs font-extrabold">📌 패들렛(Padlet) 배포 전용 학생 링크</span>
+                  <h2 class="mt-2 text-base sm:text-lg font-extrabold text-slate-900">
+                    실제 학생 배포용 링크에서는 교사 복귀 버튼과 교사 메뉴가 완전히 숨겨집니다
+                  </h2>
+                  <p class="text-xs text-slate-600 mt-1">
+                    아래 주소를 패들렛 게시글이나 학급 공지에 붙여넣어 배포하세요. (현재 응답률: <strong>${submittedCount} / ${ws.students.length}명</strong>)
+                  </p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    data-action="copy-student-link"
+                    class="px-4 py-2.5 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-extrabold shadow cursor-pointer"
+                  >
+                    📋 학생 배포용 URL 복사 (?mode=student)
+                  </button>
+                  <button
+                    type="button"
+                    data-action="enter-preview-mode"
+                    class="px-4 py-2.5 rounded-2xl bg-white hover:bg-orange-100 text-orange-800 border border-orange-300 text-xs font-extrabold cursor-pointer"
+                  >
+                    📌 패들렛 학생 화면 미리보기
+                  </button>
+                </div>
+              </div>
+              <div class="mt-3 px-3.5 py-2 rounded-xl bg-white/90 border border-orange-200/80 font-mono text-xs text-slate-700 truncate">
+                ${esc(shareUrl)}
+              </div>
+            </div>
+
+            <!-- Add Student Form + Roster & Survey Status Table -->
+            <div class="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200/80">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <h3 class="text-base font-extrabold text-slate-900">📋 학급 명단 및 비밀 설문 응답 현황 (${ws.students.length}명)</h3>
+                <!-- Quick Add Student -->
+                <div class="flex flex-wrap items-center gap-2">
+                  <input
+                    type="number"
+                    data-action="roster-input-num"
+                    value="${esc(state.rosterNewNum)}"
+                    placeholder="번호"
+                    class="w-16 px-2.5 py-1.5 rounded-xl border border-slate-300 text-xs"
+                  />
+                  <input
+                    type="text"
+                    data-action="roster-input-name"
+                    value="${esc(state.rosterNewName)}"
+                    placeholder="학생 이름"
+                    class="w-24 px-2.5 py-1.5 rounded-xl border border-slate-300 text-xs"
+                  />
+                  <select data-action="roster-input-grade" class="px-2 py-1.5 rounded-xl border border-slate-300 text-xs">
+                    <option value="상" ${state.rosterNewGrade === '상' ? 'selected' : ''}>성적: 상</option>
+                    <option value="중" ${state.rosterNewGrade === '중' ? 'selected' : ''}>성적: 중</option>
+                    <option value="하" ${state.rosterNewGrade === '하' ? 'selected' : ''}>성적: 하</option>
+                  </select>
+                  <select data-action="roster-input-role" class="px-2 py-1.5 rounded-xl border border-slate-300 text-xs">
+                    <option value="normal" ${state.rosterNewRole === 'normal' ? 'selected' : ''}>일반</option>
+                    <option value="mentor" ${state.rosterNewRole === 'mentor' ? 'selected' : ''}>멘토</option>
+                    <option value="mentee" ${state.rosterNewRole === 'mentee' ? 'selected' : ''}>멘티</option>
+                  </select>
+                  <button
+                    type="button"
+                    data-action="roster-add-student"
+                    class="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer"
+                  >
+                    + 학생 추가
+                  </button>
+                </div>
+              </div>
+
+              <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr class="border-b border-slate-200 text-slate-500 bg-slate-50/80">
+                      <th class="py-2.5 px-3">번호</th>
+                      <th class="py-2.5 px-3">이름</th>
+                      <th class="py-2.5 px-3">성적</th>
+                      <th class="py-2.5 px-3">역할</th>
+                      <th class="py-2.5 px-3">함께 앉고 싶은 친구 (1~3순위)</th>
+                      <th class="py-2.5 px-3">피하고 싶은 친구</th>
+                      <th class="py-2.5 px-3">비밀 응원 메시지</th>
+                      <th class="py-2.5 px-3 text-right">관리</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    ${ws.students
+                      .slice()
+                      .sort((a, b) => a.num - b.num)
+                      .map((st) => {
+                        const surv = ws.surveys[st.id];
+                        const prefNames = surv
+                          ? (surv.prefer || [])
+                              .map((id) => getStudentById(ws, id))
+                              .filter(Boolean)
+                              .map((s) => `${s.num}번 ${s.name}`)
+                              .join(', ')
+                          : '';
+                        const avoidNames = surv
+                          ? (surv.avoid || [])
+                              .map((id) => getStudentById(ws, id))
+                              .filter(Boolean)
+                              .map((s) => `${s.num}번 ${s.name}`)
+                              .join(', ')
+                          : '';
+
+                        return `
+                          <tr class="hover:bg-slate-50/80">
+                            <td class="py-2.5 px-3 font-bold text-slate-600">${st.num}번</td>
+                            <td class="py-2.5 px-3 font-extrabold text-slate-900">${esc(st.name)}</td>
+                            <td class="py-2.5 px-3">
+                              <select
+                                data-action="roster-update-grade"
+                                data-student-id="${esc(st.id)}"
+                                class="px-2 py-1 rounded-lg border border-slate-200 bg-white font-bold"
+                              >
+                                <option value="상" ${st.grade === '상' ? 'selected' : ''}>상</option>
+                                <option value="중" ${st.grade === '중' ? 'selected' : ''}>중</option>
+                                <option value="하" ${st.grade === '하' ? 'selected' : ''}>하</option>
+                              </select>
+                            </td>
+                            <td class="py-2.5 px-3">
+                              <select
+                                data-action="roster-update-role"
+                                data-student-id="${esc(st.id)}"
+                                class="px-2 py-1 rounded-lg border border-slate-200 bg-white font-bold"
+                              >
+                                <option value="normal" ${st.role === 'normal' ? 'selected' : ''}>일반</option>
+                                <option value="mentor" ${st.role === 'mentor' ? 'selected' : ''}>멘토</option>
+                                <option value="mentee" ${st.role === 'mentee' ? 'selected' : ''}>멘티</option>
+                              </select>
+                            </td>
+                            <td class="py-2.5 px-3 text-emerald-700 font-medium">
+                              ${surv ? (prefNames ? esc(prefNames) : '<span class="text-slate-400">상관없음</span>') : '<span class="text-amber-600">미제출</span>'}
+                            </td>
+                            <td class="py-2.5 px-3 text-rose-600 font-medium">
+                              ${surv ? (avoidNames ? esc(avoidNames) : '<span class="text-slate-400">상관없음</span>') : '-'}
+                            </td>
+                            <td class="py-2.5 px-3 text-slate-600 max-w-xs truncate">
+                              ${surv && surv.message ? esc(surv.message) : '-'}
+                            </td>
+                            <td class="py-2.5 px-3 text-right">
+                              <button
+                                type="button"
+                                data-action="roster-delete-student"
+                                data-student-id="${esc(st.id)}"
+                                class="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold cursor-pointer"
+                              >
+                                삭제
+                              </button>
+                            </td>
+                          </tr>
+                        `;
+                      })
+                      .join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      function renderAwardsCeremonyTab(ws) {
+        const rankings = computeAwardRankings(ws);
+        const step = state.awardRevealStep; // 0: Ready, 1: 3rd, 2: 2nd, 3: 1st
+        const top3 = rankings.slice(0, 3);
+
+        // Collect all anonymous warm praise messages
+        const allMessages = [];
+        Object.values(ws.surveys).forEach((surv) => {
+          if (surv.bestStudentId && surv.message && surv.message.trim()) {
+            const target = getStudentById(ws, surv.bestStudentId);
+            if (target) {
+              allMessages.push({
+                toName: `${target.num}번 ${target.name}`,
+                badge: surv.bestBadge || '칭찬왕',
+                text: surv.message.trim()
+              });
+            }
+          }
+        });
+
+        return `
+          <div class="space-y-6 animate-fade-in">
+            <div class="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 text-white rounded-3xl p-6 sm:p-10 shadow-xl border border-indigo-800/60">
+              ${
+                step >= 3
+                  ? Array.from({ length: 18 })
+                      .map((_, i) => {
+                        const colors = ['#fbbf24', '#f472b6', '#34d399', '#60a5fa', '#a78bfa'];
+                        const color = colors[i % colors.length];
+                        const left = (i * 5.5) % 96;
+                        const delay = (i % 5) * 0.25;
+                        return `<div class="confetti-piece" style="left:${left}%; top:0; background:${color}; animation-delay:${delay}s;"></div>`;
+                      })
+                      .join('')
+                  : ''
+              }
+
+              <div class="text-center max-w-2xl mx-auto">
+                <span class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 text-xs font-extrabold mb-3">
+                  <span>🏆 TV 송출용 학급 시상식</span>
+                </span>
+                <h2 class="text-2xl sm:text-4xl font-extrabold tracking-tight">
+                  ${esc(ws.name)} 이달의 최고의 학생 발표
+                </h2>
+                <p class="mt-2 text-xs sm:text-sm text-indigo-200">
+                  우리 반 친구들이 비밀 설문에서 직접 추천한 따뜻한 칭찬 투표 결과입니다.
+                </p>
+
+                <!-- Sequential Reveal Controls -->
+                <div class="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+                  <button
+                    type="button"
+                    data-action="award-set-step"
+                    data-step="0"
+                    class="px-4 py-2.5 rounded-2xl text-xs font-bold border transition cursor-pointer ${
+                      step === 0 ? 'bg-white text-slate-900 border-white' : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
+                    }"
+                  >
+                    🔄 대기 화면
+                  </button>
+                  <button
+                    type="button"
+                    data-action="award-set-step"
+                    data-step="1"
+                    class="px-4 py-2.5 rounded-2xl text-xs font-bold border transition cursor-pointer ${
+                      step >= 1 ? 'bg-amber-700 text-white border-amber-500' : 'bg-white/10 text-amber-200 border-white/20 hover:bg-white/20'
+                    }"
+                  >
+                    🥉 3위 공개
+                  </button>
+                  <button
+                    type="button"
+                    data-action="award-set-step"
+                    data-step="2"
+                    class="px-4 py-2.5 rounded-2xl text-xs font-bold border transition cursor-pointer ${
+                      step >= 2 ? 'bg-slate-300 text-slate-900 border-white' : 'bg-white/10 text-slate-200 border-white/20 hover:bg-white/20'
+                    }"
+                  >
+                    🥈 2위 공개
+                  </button>
+                  <button
+                    type="button"
+                    data-action="award-set-step"
+                    data-step="3"
+                    class="px-5 py-2.5 rounded-2xl text-xs font-extrabold border transition cursor-pointer ${
+                      step >= 3
+                        ? 'bg-gradient-to-r from-amber-400 to-yellow-300 text-slate-950 border-yellow-200 shadow-lg'
+                        : 'bg-amber-500/80 hover:bg-amber-400 text-slate-950 border-amber-300'
+                    }"
+                  >
+                    🥇 대망의 1위 공개!
+                  </button>
+                </div>
+              </div>
+
+              <!-- Podium Display -->
+              <div class="mt-10 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto items-end">
+                <!-- 2nd Place -->
+                <div class="order-2 md:order-1 bg-white/10 backdrop-blur rounded-3xl p-6 border border-white/15 text-center">
+                  <div class="text-3xl mb-2">🥈</div>
+                  <div class="text-xs font-bold text-slate-300">이달의 칭찬 2위</div>
+                  ${
+                    step >= 2 && top3[1]
+                      ? `
+                    <div class="mt-2 text-2xl font-extrabold text-white animate-fade-in">${top3[1].student.num}번 ${esc(top3[1].student.name)}</div>
+                    <div class="mt-1 text-xs font-bold text-amber-300">득표 ${top3[1].votes}표</div>
+                    <div class="mt-2 inline-block px-3 py-1 rounded-full bg-white/15 text-[11px]">${esc(top3[1].badges[0] || '따뜻한 친구')}</div>
+                    `
+                      : '<div class="mt-3 text-xl font-extrabold text-white/30">? ? ?</div>'
+                  }
+                </div>
+
+                <!-- 1st Place -->
+                <div class="order-1 md:order-2 bg-gradient-to-b from-amber-400/25 to-white/10 backdrop-blur rounded-3xl p-7 border-2 border-amber-400/60 text-center shadow-2xl">
+                  <div class="text-4xl mb-2">👑</div>
+                  <div class="text-xs font-extrabold text-amber-300 uppercase tracking-wider">이달의 최고의 학생 1위</div>
+                  ${
+                    step >= 3 && top3[0]
+                      ? `
+                    <div class="mt-2 text-3xl font-extrabold text-yellow-200 animate-fade-in">${top3[0].student.num}번 ${esc(top3[0].student.name)}</div>
+                    <div class="mt-1 text-sm font-bold text-white">득표 ${top3[0].votes}표</div>
+                    <div class="mt-2 inline-block px-3.5 py-1 rounded-full bg-amber-400 text-slate-950 font-extrabold text-xs">${esc(top3[0].badges[0] || '최고의 학생')}</div>
+                    `
+                      : '<div class="mt-4 text-2xl font-extrabold text-amber-200/40">두구두구... ?</div>'
+                  }
+                </div>
+
+                <!-- 3rd Place -->
+                <div class="order-3 bg-white/10 backdrop-blur rounded-3xl p-6 border border-white/15 text-center">
+                  <div class="text-3xl mb-2">🥉</div>
+                  <div class="text-xs font-bold text-amber-200/80">이달의 칭찬 3위</div>
+                  ${
+                    step >= 1 && top3[2]
+                      ? `
+                    <div class="mt-2 text-2xl font-extrabold text-white animate-fade-in">${top3[2].student.num}번 ${esc(top3[2].student.name)}</div>
+                    <div class="mt-1 text-xs font-bold text-amber-300">득표 ${top3[2].votes}표</div>
+                    <div class="mt-2 inline-block px-3 py-1 rounded-full bg-white/15 text-[11px]">${esc(top3[2].badges[0] || '배려 천사')}</div>
+                    `
+                      : '<div class="mt-3 text-xl font-extrabold text-white/30">? ? ?</div>'
+                  }
+                </div>
+              </div>
+            </div>
+
+            <!-- Anonymized Praise Messages Board -->
+            <div class="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200/80">
+              <h3 class="text-base font-extrabold text-slate-900 mb-3">💌 친구들이 보낸 익명 칭찬 메시지 (${allMessages.length}건)</h3>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                ${
+                  allMessages.length === 0
+                    ? '<p class="text-xs text-slate-400">아직 등록된 응원 메시지가 없습니다.</p>'
+                    : allMessages
+                        .map(
+                          (m) => `
+                        <div class="p-4 rounded-2xl bg-amber-50/60 border border-amber-200/80">
+                          <div class="flex items-center justify-between text-xs font-bold mb-1.5">
+                            <span class="text-indigo-700">To. ${esc(m.toName)}</span>
+                            <span class="px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-950 text-[10px]">${esc(m.badge)}</span>
+                          </div>
+                          <p class="text-xs text-slate-700 leading-relaxed">“${esc(m.text)}”</p>
+                        </div>
+                      `
+                        )
+                        .join('')
+                }
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      function renderArchiveAndBackupTab(ws) {
+        return `
+          <div class="space-y-6 animate-fade-in">
+            <!-- Save Current Seating Snapshot -->
+            <div class="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200/80">
+              <h2 class="text-base font-extrabold text-slate-900 mb-1">🗂️ 현재 자리배치 1년 저장소에 보관하기</h2>
+              <p class="text-xs text-slate-500 mb-4">월별·시기별 자리배치 기록을 저장해 두면 이전 짝꿍 이력을 확인하거나 언제든 다시 불러올 수 있습니다.</p>
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                <input
+                  type="text"
+                  data-action="archive-input-title"
+                  value="${esc(state.archiveTitleInput)}"
+                  placeholder="제목 (예: 2026년 11월 기말고사 대비 배치)"
+                  class="sm:col-span-5 px-4 py-2.5 rounded-2xl border border-slate-300 text-xs sm:text-sm"
+                />
+                <input
+                  type="text"
+                  data-action="archive-input-memo"
+                  value="${esc(state.archiveMemoInput)}"
+                  placeholder="메모 (예: 멘토-멘티 매칭 적용)"
+                  class="sm:col-span-5 px-4 py-2.5 rounded-2xl border border-slate-300 text-xs sm:text-sm"
+                />
+                <button
+                  type="button"
+                  data-action="archive-save-current"
+                  class="sm:col-span-2 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm shadow cursor-pointer"
+                >
+                  💾 스냅샷 저장
+                </button>
+              </div>
+            </div>
+
+            <!-- Archived Seating Snapshots List -->
+            <div class="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200/80">
+              <h3 class="text-base font-extrabold text-slate-900 mb-4">📅 저장된 연간 자리배치 기록 (${ws.archives.length}건)</h3>
+              ${
+                ws.archives.length === 0
+                  ? '<p class="text-xs text-slate-400">저장된 자리배치 기록이 없습니다.</p>'
+                  : `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      ${ws.archives
+                        .map(
+                          (arc) => `
+                        <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 flex flex-col justify-between">
+                          <div>
+                            <div class="flex items-center justify-between text-xs text-slate-500 mb-1">
+                              <span>${esc(arc.date)}</span>
+                              <span class="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 font-bold">
+                                ${arc.mode === 'pair' ? '2인 1조 짝꿍형' : '1인 분단형'} (${arc.cols}열×${arc.rows}행)
+                              </span>
+                            </div>
+                            <div class="font-extrabold text-sm text-slate-900">${esc(arc.title)}</div>
+                            <p class="text-xs text-slate-600 mt-1">${esc(arc.memo || '메모 없음')}</p>
+                          </div>
+                          <div class="mt-4 flex gap-2">
+                            <button
+                              type="button"
+                              data-action="archive-load"
+                              data-archive-id="${esc(arc.id)}"
+                              class="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer"
+                            >
+                              📂 자리배치 스튜디오로 불러오기
+                            </button>
+                            <button
+                              type="button"
+                              data-action="archive-delete"
+                              data-archive-id="${esc(arc.id)}"
+                              class="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold cursor-pointer"
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        </div>
+                      `
+                        )
+                        .join('')}
+                    </div>`
+              }
+            </div>
+
+            <!-- JSON Full Backup & Restore -->
+            <div class="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 class="text-base font-extrabold text-slate-900">🔐 학급 전체 데이터 JSON 백업 및 복원</h3>
+                <p class="text-xs text-slate-500 mt-1">학생 명단, 비밀 설문 응답, 자리배치, 연간 저장소 기록 전체를 파일로 백업하거나 복원합니다.</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  data-action="backup-export-json"
+                  class="px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+                >
+                  ⬇️ JSON 백업 다운로드
+                </button>
+                <label class="px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold cursor-pointer">
+                  ⬆️ JSON 백업 복원
+                  <input type="file" accept=".json,application/json" data-action="backup-import-json" class="hidden" />
+                </label>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      function renderFirebaseModal() {
+        if (!state.showFirebaseModal) return '';
+        const cfg = state.firebaseConfig;
+        return `
+          <div class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+            <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+              <div class="flex items-center justify-between mb-3">
+                <span class="px-3 py-1 rounded-full bg-sky-50 text-sky-700 text-xs font-bold">☁️ Firebase Firestore 실시간 연동</span>
+                <button
+                  type="button"
+                  data-action="close-firebase-modal"
+                  class="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-500 font-bold cursor-pointer"
+                >✕</button>
+              </div>
+              <h3 class="text-lg font-extrabold text-slate-900">클라우드 실시간 동기화 설정</h3>
+              <p class="text-xs text-slate-500 mt-1 mb-4">
+                Firebase 프로젝트 정보를 입력하면 패들렛 학생 설문이 교사 화면에 실시간 동기화됩니다. 미설정 시에도 브라우저 <code>localStorage</code>에 자동 저장됩니다.
+              </p>
+              <div class="space-y-3 text-xs">
+                <label class="flex items-center gap-2 font-bold text-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    data-action="fb-toggle-enabled"
+                    ${cfg.enabled ? 'checked' : ''}
+                    class="w-4 h-4 rounded text-indigo-600"
+                  />
+                  <span>Firebase 실시간 동기화 활성화</span>
+                </label>
+                <div>
+                  <label class="block font-bold text-slate-600 mb-1">Project ID</label>
+                  <input
+                    type="text"
+                    data-action="fb-input-field"
+                    data-field="projectId"
+                    value="${esc(cfg.projectId)}"
+                    placeholder="예: modus-seat-2026"
+                    class="w-full px-3 py-2 rounded-xl border border-slate-300"
+                  />
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-600 mb-1">Web API Key</label>
+                  <input
+                    type="text"
+                    data-action="fb-input-field"
+                    data-field="apiKey"
+                    value="${esc(cfg.apiKey)}"
+                    placeholder="AIzaSy..."
+                    class="w-full px-3 py-2 rounded-xl border border-slate-300"
+                  />
+                </div>
+              </div>
+              <div class="mt-5 flex gap-2">
+                <button
+                  type="button"
+                  data-action="close-firebase-modal"
+                  class="flex-1 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                >닫기</button>
+                <button
+                  type="button"
+                  data-action="save-firebase-config"
+                  class="flex-1 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow cursor-pointer"
+                >설정 저장</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      /**
+       * 7-E. MAIN TEACHER DASHBOARD SHELL
+       */
+      function renderTeacherDashboard(ws) {
+        const tabs = [
+          { id: 'seating', label: '🪑 자리배치 스튜디오' },
+          { id: 'graph', label: '🕸️ 학급 인물관계도' },
+          { id: 'survey', label: `📋 설문 & 명단 (${Object.keys(ws.surveys).length}/${ws.students.length})` },
+          { id: 'awards', label: '🏆 이달의 최고의 학생' },
+          { id: 'archive', label: '🗂️ 연간 저장소 & 백업' }
+        ];
+
+        return `
+          <div class="min-h-screen bg-slate-100/80 flex flex-col">
+            <!-- Top Navigation Header (Hidden on Print) -->
+            <header class="no-print sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-xs">
+              <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  <div class="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-extrabold text-base shadow-sm">
+                    M
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-extrabold text-sm sm:text-base text-slate-900">모두의자리</span>
+                      <span class="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-mono text-xs font-extrabold border border-indigo-200">
+                        ${esc(ws.name)} (${esc(ws.code)})
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right Teacher Action Buttons -->
+                <div class="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    data-action="open-firebase-modal"
+                    class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+                  >
+                    ${state.firebaseConfig.enabled ? '☁️ 클라우드 연동됨' : '💾 로컬 자동저장'}
+                  </button>
+                  <button
+                    type="button"
+                    data-action="copy-student-link"
+                    class="px-3 py-2 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-800 border border-orange-200 text-xs font-bold cursor-pointer"
+                  >
+                    🔗 학생 배포 링크 복사
+                  </button>
+                  <button
+                    type="button"
+                    data-action="enter-preview-mode"
+                    class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white text-xs font-extrabold shadow-xs cursor-pointer"
+                  >
+                    📌 패들렛 학생 화면 미리보기
+                  </button>
+                  <button
+                    type="button"
+                    data-action="teacher-logout"
+                    class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold cursor-pointer"
+                  >
+                    🚪 학급 잠금
+                  </button>
+                </div>
+              </div>
+
+              <!-- Sub-Navigation Tabs -->
+              <div class="max-w-7xl mx-auto px-4 pb-2.5 flex items-center gap-1.5 overflow-x-auto">
+                ${tabs
+                  .map(
+                    (t) => `
+                  <button
+                    type="button"
+                    data-action="switch-tab"
+                    data-tab="${t.id}"
+                    class="shrink-0 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+                      state.activeTab === t.id
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }"
+                  >
+                    ${t.label}
+                  </button>
+                `
+                  )
+                  .join('')}
+              </div>
+            </header>
+
+            <!-- Active Tab Main Content -->
+            <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
+              ${state.activeTab === 'seating' ? renderSeatingStudioTab(ws) : ''}
+              ${state.activeTab === 'graph' ? renderRelationshipGraphTab(ws) : ''}
+              ${state.activeTab === 'survey' ? renderSurveyAndRosterTab(ws) : ''}
+              ${state.activeTab === 'awards' ? renderAwardsCeremonyTab(ws) : ''}
+              ${state.activeTab === 'archive' ? renderArchiveAndBackupTab(ws) : ''}
+            </main>
+          </div>
+        `;
+      }
+
+      function renderToast() {
+        if (!state.toast) return '';
+        const bg =
+          state.toast.type === 'success'
+            ? 'bg-emerald-600 text-white'
+            : state.toast.type === 'error'
+            ? 'bg-rose-600 text-white'
+            : 'bg-slate-900 text-white';
+        return `
+          <div class="fixed bottom-5 right-5 z-50 px-5 py-3 rounded-2xl shadow-xl text-xs sm:text-sm font-bold ${bg} animate-fade-in">
+            ${esc(state.toast.message)}
+          </div>
+        `;
+      }
+
+      /* =========================================================================
+       * 8. MASTER RENDER FUNCTION
+       * ========================================================================= */
+      function render() {
+        const root = document.getElementById('app-root');
+        if (!root) return;
+        const ws = getCurrentWorkspace();
+
+        let screenHtml = '';
+
+        // 1. Real Student Distribution Mode (?mode=student)
+        if (state.isStudentUrlMode && !state.isTeacherAuthenticated) {
+          screenHtml = renderStudentSurveyScreen(ws) + renderSecretPinModal(ws);
+        }
+        // 2. Teacher Not Authenticated (Normal URL without ?mode=student)
+        else if (!state.isTeacherAuthenticated) {
+          screenHtml = renderWorkspaceGate();
+        }
+        // 3. Authenticated Teacher Previewing Student Screen (previewStudentMode === true)
+        else if (state.previewStudentMode) {
+          screenHtml = renderStudentSurveyScreen(ws);
+        }
+        // 4. Authenticated Teacher Full Management Dashboard
+        else {
+          screenHtml = renderTeacherDashboard(ws) + renderFirebaseModal();
+        }
+
+        root.innerHTML = screenHtml + renderToast();
+      }
+
+      /* =========================================================================
+       * 9. CENTRALIZED EVENT DELEGATION ON #app-root (ZERO INLINE HANDLERS)
+       * ========================================================================= */
+      const appRoot = document.getElementById('app-root');
+
+      function openSecretTeacherPinModal() {
+        state.showSecretPinModal = true;
+        state.secretPinInput = '';
+        state.secretPinError = '';
+        render();
+        setTimeout(() => {
+          const inp = document.getElementById('secret-pin-field');
+          if (inp) inp.focus();
+        }, 40);
+      }
+
+      function verifySecretTeacherPin() {
+        const ws = getCurrentWorkspace();
+        if (state.secretPinInput.trim() === ws.pin) {
+          state.showSecretPinModal = false;
+          state.secretPinError = '';
+          state.isTeacherAuthenticated = true;
+          state.isStudentUrlMode = false;
+          state.previewStudentMode = false;
+          try {
+            const cleanUrl = new URL(window.location.href);
+            cleanUrl.searchParams.delete('mode');
+            window.history.replaceState({}, '', cleanUrl.toString());
+          } catch (e) {
+            // Safe ignore in restricted iframe environments
+          }
+          render();
+          showToast(`🔓 ${ws.name} 담임교사 관리 화면으로 전환되었습니다.`, 'success');
+        } else {
+          state.secretPinError = 'PIN 번호가 일치하지 않습니다. 다시 확인해 주세요.';
+          render();
+        }
+      }
+
+      // Click Delegation
+      appRoot.addEventListener('click', (e) => {
+        const target = e.target.closest('[data-action]');
+        if (!target) return;
+
+        const action = target.getAttribute('data-action');
+        const ws = getCurrentWorkspace();
+
+        switch (action) {
+          /* --- Secret Escape Hatch in ?mode=student --- */
+          case 'secret-badge-tap': {
+            if (!state.isStudentUrlMode) return;
+            state.secretTapCount += 1;
+            if (state.secretTapTimer) clearTimeout(state.secretTapTimer);
+            state.secretTapTimer = setTimeout(() => {
+              state.secretTapCount = 0;
+            }, 3000);
+            if (state.secretTapCount >= 5) {
+              state.secretTapCount = 0;
+              openSecretTeacherPinModal();
+            }
+            break;
+          }
+          case 'close-secret-pin-modal': {
+            state.showSecretPinModal = false;
+            render();
+            break;
+          }
+          case 'submit-secret-pin': {
+            verifySecretTeacherPin();
+            break;
+          }
+
+          /* --- Teacher Preview Mode Toggle (ONLY available to authenticated teachers) --- */
+          case 'enter-preview-mode': {
+            if (!state.isTeacherAuthenticated) return;
+            state.previewStudentMode = true;
+            state.surveyStep = 1;
+            state.surveySearch = '';
+            state.surveyForm = {
+              studentId: '',
+              prefer: ['', '', ''],
+              avoid: ['', '', ''],
+              bestStudentId: '',
+              bestBadge: '다정·배려왕',
+              message: ''
+            };
+            render();
+            break;
+          }
+          case 'exit-preview-mode': {
+            state.previewStudentMode = false;
+            render();
+            break;
+          }
+
+          /* --- Workspace Gate Actions --- */
+          case 'gate-switch-tab': {
+            state.gateTab = target.getAttribute('data-tab') || 'login';
+            state.loginError = '';
+            state.createError = '';
+            render();
+            break;
+          }
+          case 'gate-select-class': {
+            state.loginClassCode = target.getAttribute('data-code') || '';
+            state.loginError = '';
+            render();
+            break;
+          }
+          case 'gate-submit-login': {
+            const code = (state.loginClassCode || '').toUpperCase().trim();
+            const found = state.workspaces[code];
+            if (!found) {
+              state.loginError = '존재하지 않는 학급 코드입니다.';
+              render();
+              return;
+            }
+            if (String(state.loginPin).trim() !== String(found.pin)) {
+              state.loginError = '담임교사 PIN 번호가 올바르지 않습니다.';
+              render();
+              return;
+            }
+            state.activeClassCode = code;
+            state.isTeacherAuthenticated = true;
+            state.previewStudentMode = false;
+            state.loginPin = '';
+            state.loginError = '';
+            persistCurrentWorkspace();
+            render();
+            showToast(`👋 ${found.name} 관리 대시보드에 오신 것을 환영합니다!`, 'success');
+            break;
+          }
+          case 'gate-demo-quick-login': {
+            if (!state.workspaces[DEMO_CLASS_CODE]) {
+              state.workspaces[DEMO_CLASS_CODE] = createDefaultWorkspace();
+            }
+            state.activeClassCode = DEMO_CLASS_CODE;
+            state.isTeacherAuthenticated = true;
+            state.previewStudentMode = false;
+            persistCurrentWorkspace();
+            render();
+            showToast('⚡ 기본 체험 반(MODU2026)으로 즉시 입장했습니다.', 'success');
+            break;
+          }
+          case 'gate-submit-create': {
+            const code = (state.newClassCode || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+            const name = (state.newClassName || '').trim();
+            const pin = (state.newClassPin || '').trim();
+            if (!code || code.length < 3) {
+              state.createError = '학급 코드는 영문/숫자 3자 이상 입력해 주세요.';
+              render();
+              return;
+            }
+            if (state.workspaces[code]) {
+              state.createError = '이미 사용 중인 학급 코드입니다.';
+              render();
+              return;
+            }
+            if (!name) {
+              state.createError = '학급명을 입력해 주세요.';
+              render();
+              return;
+            }
+            if (pin.length < 4) {
+              state.createError = 'PIN 번호는 4자리 이상으로 설정해 주세요.';
+              render();
+              return;
+            }
+
+            const newWs = createDefaultWorkspace(code, name, pin, false);
+            const lines = (state.newClassRosterText || '').split('\n').map((l) => l.trim()).filter(Boolean);
+            lines.forEach((line, idx) => {
+              const parts = line.split(/\s+/);
+              const parsedNum = parseInt(parts[0], 10);
+              const num = !isNaN(parsedNum) ? parsedNum : idx + 1;
+              const stName = !isNaN(parsedNum) ? parts.slice(1).join(' ') : line;
+              if (stName) {
+                newWs.students.push({
+                  id: `st_${Date.now()}_${idx}`,
+                  num,
+                  name: stName,
+                  gender: idx % 2 === 0 ? 'M' : 'F',
+                  grade: '중',
+                  role: 'normal',
+                  note: ''
+                });
+              }
+            });
+            resizeSeatingGrid(newWs, 'single', 5, 6);
+            newWs.students.forEach((st, i) => {
+              const r = Math.floor(i / 5);
+              const c = i % 5;
+              if (r < 6 && c < 5) newWs.seating.grid[r][c] = st.id;
+            });
+
+            state.workspaces[code] = newWs;
+            state.activeClassCode = code;
+            state.isTeacherAuthenticated = true;
+            state.previewStudentMode = false;
+            persistCurrentWorkspace();
+            render();
+            showToast(`🎉 ${name} (${code}) 학급이 개설되었습니다!`, 'success');
+            break;
+          }
+
+          /* --- Teacher Header Actions --- */
+          case 'teacher-logout': {
+            state.isTeacherAuthenticated = false;
+            state.previewStudentMode = false;
+            state.loginClassCode = ws.code;
+            state.loginPin = '';
+            render();
+            break;
+          }
+          case 'switch-tab': {
+            state.activeTab = target.getAttribute('data-tab') || 'seating';
+            state.graphFullscreen = false;
+            render();
+            break;
+          }
+          case 'copy-student-link': {
+            const url = buildStudentShareUrl(ws.code);
+            copyTextSafely(url, '📋 학생 배포용 링크(?mode=student)가 복사되었습니다! 패들렛에 붙여넣으세요.');
+            break;
+          }
+          case 'open-firebase-modal': {
+            state.showFirebaseModal = true;
+            render();
+            break;
+          }
+          case 'close-firebase-modal': {
+            state.showFirebaseModal = false;
+            render();
+            break;
+          }
+          case 'save-firebase-config': {
+            try {
+              localStorage.setItem(STORAGE_KEY_FIREBASE_CFG, JSON.stringify(state.firebaseConfig));
+            } catch (e) {
+              // ignore
+            }
+            syncToCloudIfEnabled();
+            state.showFirebaseModal = false;
+            render();
+            showToast('☁️ 클라우드 동기화 설정이 저장되었습니다.', 'success');
+            break;
+          }
+
+          /* --- Student 3-Step Survey Actions --- */
+          case 'survey-select-student': {
+            const stId = target.getAttribute('data-student-id');
+            if (!stId) return;
+            const existing = ws.surveys[stId];
+            state.surveyForm = existing
+              ? {
+                  studentId: stId,
+                  prefer: [...(existing.prefer || ['', '', ''])],
+                  avoid: [...(existing.avoid || ['', '', ''])],
+                  bestStudentId: existing.bestStudentId || '',
+                  bestBadge: existing.bestBadge || '다정·배려왕',
+                  message: existing.message || ''
+                }
+              : {
+                  studentId: stId,
+                  prefer: ['', '', ''],
+                  avoid: ['', '', ''],
+                  bestStudentId: '',
+                  bestBadge: '다정·배려왕',
+                  message: ''
+                };
+            render();
+            break;
+          }
+          case 'survey-next-step': {
+            const nextStep = parseInt(target.getAttribute('data-target-step'), 10);
+            if (nextStep === 2 && !state.surveyForm.studentId) {
+              showToast('먼저 본인의 학번과 이름을 선택해 주세요.', 'error');
+              return;
+            }
+            state.surveyStep = nextStep;
+            render();
+            break;
+          }
+          case 'survey-prev-step': {
+            const prevStep = parseInt(target.getAttribute('data-target-step'), 10);
+            state.surveyStep = prevStep;
+            render();
+            break;
+          }
+          case 'survey-select-badge': {
+            state.surveyForm.bestBadge = target.getAttribute('data-badge') || '다정·배려왕';
+            render();
+            break;
+          }
+          case 'survey-submit': {
+            const f = state.surveyForm;
+            if (!f.studentId) {
+              showToast('학생 정보가 선택되지 않았습니다.', 'error');
+              return;
+            }
+            ws.surveys[f.studentId] = {
+              studentId: f.studentId,
+              prefer: [f.prefer[0] || '', f.prefer[1] || '', f.prefer[2] || ''],
+              avoid: [f.avoid[0] || '', f.avoid[1] || '', f.avoid[2] || ''],
+              bestStudentId: f.bestStudentId || '',
+              bestBadge: f.bestBadge || '다정·배려왕',
+              message: (f.message || '').trim(),
+              updatedAt: new Date().toLocaleString('ko-KR')
+            };
+            persistCurrentWorkspace();
+            state.surveyStep = 4;
+            render();
+            break;
+          }
+          case 'survey-reset-for-next': {
+            state.surveyStep = 1;
+            state.surveySearch = '';
+            state.surveyForm = {
+              studentId: '',
+              prefer: ['', '', ''],
+              avoid: ['', '', ''],
+              bestStudentId: '',
+              bestBadge: '다정·배려왕',
+              message: ''
+            };
+            render();
+            break;
+          }
+
+          /* --- Seating Studio Actions --- */
+          case 'seating-set-mode': {
+            const newMode = target.getAttribute('data-mode');
+            const defaultCols = newMode === 'pair' ? 6 : 5;
+            resizeSeatingGrid(ws, newMode, defaultCols, ws.seating.rows);
+            state.selectedSeat = null;
+            persistCurrentWorkspace();
+            render();
+            break;
+          }
+          case 'seating-toggle-pin': {
+            e.stopPropagation();
+            const stId = target.getAttribute('data-student-id');
+            if (!stId) return;
+            if (ws.seating.pinned[stId]) {
+              delete ws.seating.pinned[stId];
+            } else {
+              ws.seating.pinned[stId] = true;
+            }
+            persistCurrentWorkspace();
+            render();
+            break;
+          }
+          case 'seating-click-cell': {
+            const r = parseInt(target.getAttribute('data-row'), 10);
+            const c = parseInt(target.getAttribute('data-col'), 10);
+            if (isNaN(r) || isNaN(c)) return;
+
+            if (!state.selectedSeat) {
+              state.selectedSeat = { r, c };
+              render();
+              return;
+            }
+
+            // If unplaced student was selected first -> place into (r, c)
+            if (state.selectedSeat.unplacedId) {
+              ws.seating.grid[r][c] = state.selectedSeat.unplacedId;
+              state.selectedSeat = null;
+              persistCurrentWorkspace();
+              render();
+              return;
+            }
+
+            // Swap (r1, c1) and (r, c)
+            const { r: r1, c: c1 } = state.selectedSeat;
+            if (r1 === r && c1 === c) {
+              state.selectedSeat = null;
+              render();
+              return;
+            }
+            const temp = ws.seating.grid[r1][c1];
+            ws.seating.grid[r1][c1] = ws.seating.grid[r][c];
+            ws.seating.grid[r][c] = temp;
+            state.selectedSeat = null;
+            persistCurrentWorkspace();
+            render();
+            break;
+          }
+          case 'seating-click-unplaced': {
+            const stId = target.getAttribute('data-student-id');
+            if (!stId) return;
+            if (state.selectedSeat && typeof state.selectedSeat.r === 'number') {
+              const { r, c } = state.selectedSeat;
+              ws.seating.grid[r][c] = stId;
+              state.selectedSeat = null;
+              persistCurrentWorkspace();
+              render();
+            } else {
+              state.selectedSeat =
+                state.selectedSeat && state.selectedSeat.unplacedId === stId ? null : { unplacedId: stId };
+              render();
+            }
+            break;
+          }
+          case 'seating-optimize': {
+            const strategy = target.getAttribute('data-strategy') || 'mentor';
+            runSimulatedAnnealing(ws, strategy);
+            break;
+          }
+          case 'seating-toggle-tv-hide': {
+            state.tvHideSensitive = !state.tvHideSensitive;
+            render();
+            break;
+          }
+          case 'seating-export-csv': {
+            exportSeatingCsv(ws);
+            break;
+          }
+          case 'seating-print': {
+            window.print();
+            break;
+          }
+
+          /* --- Relationship Graph Actions --- */
+          case 'graph-set-filter': {
+            state.graphFilter = target.getAttribute('data-filter') || 'all';
+            render();
+            break;
+          }
+          case 'graph-rearrange': {
+            computeForceGraphPositions(ws, true);
+            render();
+            showToast('✨ 180회 물리 정돈 알고리즘으로 노드 배치를 최적화했습니다.', 'success');
+            break;
+          }
+          case 'graph-zoom-delta': {
+            const delta = parseInt(target.getAttribute('data-delta'), 10) || 0;
+            state.graphZoom = Math.max(80, Math.min(150, state.graphZoom + delta));
+            render();
+            break;
+          }
+          case 'graph-toggle-fullscreen': {
+            state.graphFullscreen = !state.graphFullscreen;
+            render();
+            break;
+          }
+          case 'graph-export-png': {
+            exportRelationshipPng2880x1920(ws);
+            break;
+          }
+          case 'graph-select-node': {
+            const stId = target.getAttribute('data-student-id');
+            state.selectedGraphStudentId = state.selectedGraphStudentId === stId ? null : stId;
+            render();
+            break;
+          }
+          case 'graph-close-diagnostic': {
+            state.selectedGraphStudentId = null;
+            render();
+            break;
+          }
+
+          /* --- Roster Add / Delete --- */
+          case 'roster-add-student': {
+            const name = (state.rosterNewName || '').trim();
+            if (!name) {
+              showToast('추가할 학생 이름을 입력해 주세요.', 'error');
+              return;
+            }
+            const maxNum = ws.students.reduce((m, s) => Math.max(m, s.num), 0);
+            const num = parseInt(state.rosterNewNum, 10) || maxNum + 1;
+            const newSt = {
+              id: `st_${Date.now()}`,
+              num,
+              name,
+              gender: 'M',
+              grade: state.rosterNewGrade || '중',
+              role: state.rosterNewRole || 'normal',
+              note: ''
+            };
+            ws.students.push(newSt);
+
+            // Place in first open seat if available
+            let placed = false;
+            for (let r = 0; r < ws.seating.rows && !placed; r++) {
+              for (let c = 0; c < ws.seating.cols && !placed; c++) {
+                if (!ws.seating.grid[r][c]) {
+                  ws.seating.grid[r][c] = newSt.id;
+                  placed = true;
+                }
+              }
+            }
+            state.rosterNewNum = '';
+            state.rosterNewName = '';
+            persistCurrentWorkspace();
+            render();
+            showToast(`✅ ${num}번 ${name} 학생이 명단에 추가되었습니다.`, 'success');
+            break;
+          }
+          case 'roster-delete-student': {
+            const stId = target.getAttribute('data-student-id');
+            ws.students = ws.students.filter((s) => s.id !== stId);
+            delete ws.surveys[stId];
+            delete ws.seating.pinned[stId];
+            for (let r = 0; r < ws.seating.rows; r++) {
+              for (let c = 0; c < ws.seating.cols; c++) {
+                if (ws.seating.grid[r][c] === stId) {
+                  ws.seating.grid[r][c] = null;
+                }
+              }
+            }
+            persistCurrentWorkspace();
+            render();
+            showToast('학생 정보가 삭제되었습니다.', 'info');
+            break;
+          }
+
+          /* --- Awards Ceremony Sequential Reveal --- */
+          case 'award-set-step': {
+            state.awardRevealStep = parseInt(target.getAttribute('data-step'), 10) || 0;
+            render();
+            break;
+          }
+
+          /* --- Archive & Backup Actions --- */
+          case 'archive-save-current': {
+            const title = (state.archiveTitleInput || '').trim() || `${new Date().toLocaleDateString('ko-KR')} 자리배치`;
+            const memo = (state.archiveMemoInput || '').trim();
+            ws.archives.unshift({
+              id: `arc_${Date.now()}`,
+              title,
+              date: new Date().toISOString().slice(0, 10),
+              memo,
+              mode: ws.seating.mode,
+              cols: ws.seating.cols,
+              rows: ws.seating.rows,
+              grid: JSON.parse(JSON.stringify(ws.seating.grid))
+            });
+            state.archiveTitleInput = '';
+            state.archiveMemoInput = '';
+            persistCurrentWorkspace();
+            render();
+            showToast('💾 현재 자리배치가 1년 저장소에 보관되었습니다.', 'success');
+            break;
+          }
+          case 'archive-load': {
+            const arcId = target.getAttribute('data-archive-id');
+            const found = ws.archives.find((a) => a.id === arcId);
+            if (!found) return;
+            ws.seating.mode = found.mode;
+            ws.seating.cols = found.cols;
+            ws.seating.rows = found.rows;
+            ws.seating.grid = JSON.parse(JSON.stringify(found.grid));
+            ws.seating.lastAlgorithm = `불러온 배치: ${found.title}`;
+            state.activeTab = 'seating';
+            persistCurrentWorkspace();
+            render();
+            showToast(`📂 '${found.title}' 배치를 불러왔습니다.`, 'success');
+            break;
+          }
+          case 'archive-delete': {
+            const arcId = target.getAttribute('data-archive-id');
+            ws.archives = ws.archives.filter((a) => a.id !== arcId);
+            persistCurrentWorkspace();
+            render();
+            showToast('저장된 배치 기록이 삭제되었습니다.', 'info');
+            break;
+          }
+          case 'backup-export-json': {
+            const blob = new Blob([JSON.stringify(ws, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `모두의자리_${ws.code}_${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('⬇️ 학급 전체 데이터 JSON 백업 파일이 다운로드되었습니다.', 'success');
+            break;
+          }
+
+          default:
+            break;
+        }
+      });
+
+      // Input & Change Delegation
+      appRoot.addEventListener('input', (e) => {
+        const target = e.target.closest('[data-action]');
+        if (!target) return;
+        const action = target.getAttribute('data-action');
+
+        switch (action) {
+          case 'secret-pin-input':
+            state.secretPinInput = target.value;
+            break;
+          case 'gate-login-code':
+            state.loginClassCode = target.value.toUpperCase();
+            break;
+          case 'gate-login-pin':
+            state.loginPin = target.value;
+            break;
+          case 'gate-new-code':
+            state.newClassCode = target.value.toUpperCase();
+            break;
+          case 'gate-new-name':
+            state.newClassName = target.value;
+            break;
+          case 'gate-new-pin':
+            state.newClassPin = target.value;
+            break;
+          case 'gate-new-roster':
+            state.newClassRosterText = target.value;
+            break;
+          case 'survey-search-input':
+            state.surveySearch = target.value;
+            render();
+            break;
+          case 'survey-change-message':
+            state.surveyForm.message = target.value;
+            break;
+          case 'roster-input-num':
+            state.rosterNewNum = target.value;
+            break;
+          case 'roster-input-name':
+            state.rosterNewName = target.value;
+            break;
+          case 'archive-input-title':
+            state.archiveTitleInput = target.value;
+            break;
+          case 'archive-input-memo':
+            state.archiveMemoInput = target.value;
+            break;
+          case 'fb-input-field': {
+            const field = target.getAttribute('data-field');
+            if (field) state.firebaseConfig[field] = target.value;
+            break;
+          }
+          default:
+            break;
+        }
+      });
+
+      appRoot.addEventListener('change', (e) => {
+        const target = e.target.closest('[data-action]');
+        if (!target) return;
+        const action = target.getAttribute('data-action');
+        const ws = getCurrentWorkspace();
+
+        switch (action) {
+          case 'survey-change-prefer': {
+            const rank = parseInt(target.getAttribute('data-rank'), 10);
+            state.surveyForm.prefer[rank] = target.value;
+            render();
+            break;
+          }
+          case 'survey-change-avoid': {
+            const rank = parseInt(target.getAttribute('data-rank'), 10);
+            state.surveyForm.avoid[rank] = target.value;
+            render();
+            break;
+          }
+          case 'survey-change-best': {
+            state.surveyForm.bestStudentId = target.value;
+            render();
+            break;
+          }
+          case 'seating-change-cols': {
+            const newCols = parseInt(target.value, 10);
+            resizeSeatingGrid(ws, ws.seating.mode, newCols, ws.seating.rows);
+            persistCurrentWorkspace();
+            render();
+            break;
+          }
+          case 'seating-change-rows': {
+            const newRows = parseInt(target.value, 10);
+            resizeSeatingGrid(ws, ws.seating.mode, ws.seating.cols, newRows);
+            persistCurrentWorkspace();
+            render();
+            break;
+          }
+          case 'roster-input-grade':
+            state.rosterNewGrade = target.value;
+            break;
+          case 'roster-input-role':
+            state.rosterNewRole = target.value;
+            break;
+          case 'roster-update-grade': {
+            const st = getStudentById(ws, target.getAttribute('data-student-id'));
+            if (st) {
+              st.grade = target.value;
+              persistCurrentWorkspace();
+              render();
+            }
+            break;
+          }
+          case 'roster-update-role': {
+            const st = getStudentById(ws, target.getAttribute('data-student-id'));
+            if (st) {
+              st.role = target.value;
+              persistCurrentWorkspace();
+              render();
+            }
+            break;
+          }
+          case 'fb-toggle-enabled':
+            state.firebaseConfig.enabled = Boolean(target.checked);
+            break;
+          case 'backup-import-json': {
+            const file = target.files && target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              try {
+                const imported = JSON.parse(ev.target.result);
+                if (!imported || !imported.code || !Array.isArray(imported.students) || !imported.seating) {
+                  showToast('올바른 모두의자리 JSON 백업 파일이 아닙니다.', 'error');
+                  return;
+                }
+                const code = imported.code.toUpperCase();
+                state.workspaces[code] = imported;
+                state.activeClassCode = code;
+                persistCurrentWorkspace();
+                render();
+                showToast(`✅ '${imported.name}' 백업 데이터가 복원되었습니다!`, 'success');
+              } catch (err) {
+                showToast('JSON 파일을 읽는 중 오류가 발생했습니다.', 'error');
+              }
+            };
+            reader.readAsText(file);
+            break;
+          }
+          default:
+            break;
+        }
+      });
+
+      // Drag & Drop Delegation for Seating Studio
+      appRoot.addEventListener('dragstart', (e) => {
+        const cell = e.target.closest('[data-action="seating-click-cell"]');
+        if (cell) {
+          state.dragSource = {
+            type: 'grid',
+            r: parseInt(cell.getAttribute('data-row'), 10),
+            c: parseInt(cell.getAttribute('data-col'), 10)
+          };
+          return;
+        }
+        const unp = e.target.closest('[data-action="seating-click-unplaced"]');
+        if (unp) {
+          state.dragSource = {
+            type: 'unplaced',
+            studentId: unp.getAttribute('data-student-id')
+          };
+        }
+      });
+
+      appRoot.addEventListener('dragover', (e) => {
+        const dropZone = e.target.closest('[data-drop-row]');
+        if (dropZone) {
+          e.preventDefault();
+        }
+      });
+
+      appRoot.addEventListener('drop', (e) => {
+        const dropZone = e.target.closest('[data-drop-row]');
+        if (!dropZone || !state.dragSource) return;
+        e.preventDefault();
+
+        const ws = getCurrentWorkspace();
+        const r2 = parseInt(dropZone.getAttribute('data-drop-row'), 10);
+        const c2 = parseInt(dropZone.getAttribute('data-drop-col'), 10);
+
+        if (state.dragSource.type === 'grid') {
+          const { r: r1, c: c1 } = state.dragSource;
+          if (r1 !== r2 || c1 !== c2) {
+            const tmp = ws.seating.grid[r1][c1];
+            ws.seating.grid[r1][c1] = ws.seating.grid[r2][c2];
+            ws.seating.grid[r2][c2] = tmp;
+            persistCurrentWorkspace();
+          }
+        } else if (state.dragSource.type === 'unplaced') {
+          ws.seating.grid[r2][c2] = state.dragSource.studentId;
+          persistCurrentWorkspace();
+        }
+
+        state.dragSource = null;
+        state.selectedSeat = null;
+        render();
+      });
+
+      // Global Keyboard Shortcuts (Ctrl+Shift+L in ?mode=student, Enter in PIN modal, Esc)
+      document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.shiftKey && (e.key === 'L' || e.key === 'l')) {
+          if (state.isStudentUrlMode && !state.isTeacherAuthenticated) {
+            e.preventDefault();
+            openSecretTeacherPinModal();
+          }
+        } else if (e.key === 'Enter' && state.showSecretPinModal) {
+          e.preventDefault();
+          verifySecretTeacherPin();
+        } else if (e.key === 'Escape') {
+          if (state.showSecretPinModal) {
+            state.showSecretPinModal = false;
+            render();
+          } else if (state.graphFullscreen) {
+            state.graphFullscreen = false;
+            render();
+          }
+        }
+      });
+
+      /* =========================================================================
+       * 10. INITIAL BOOTSTRAP
+       * ========================================================================= */
+      render();
+    })();
+  </script>
+</body>
+</html>
